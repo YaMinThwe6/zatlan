@@ -96,7 +96,11 @@ export function NearbyEvents() {
       {status === 'loaded' && items.length > 0 && (
         <ul className="flex flex-col gap-3">
           {items.map((event) => {
-            const joined = joinStatus[event.eventId]
+            // See UpcomingEvents.tsx's identical comment — joinStatus only
+            // records a change made this session; event.joined is the real,
+            // persisted answer, so it's the fallback instead of always
+            // starting "un-joined" (which reverted the button on refresh).
+            const joined = joinStatus[event.eventId] ?? (event.joined ? 'joined' : undefined)
             const poster = posterUrl(event.moviePoster)
             return (
               <li key={event.eventId} className="flex items-center gap-3 rounded-2xl border border-border-soft bg-surface p-3">

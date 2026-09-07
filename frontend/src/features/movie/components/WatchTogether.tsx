@@ -135,7 +135,9 @@ export function WatchTogether({ movieId }: Props) {
       {items.length > 0 && (
         <ul className="mb-3.5 flex flex-col gap-2.5">
           {items.map((event) => {
-            const status = joinStatus[event.eventId]
+            // See Home's UpcomingEvents.tsx for why this falls back to
+            // event.joined — joinStatus alone starts empty on every load.
+            const status = joinStatus[event.eventId] ?? (event.joined ? 'joined' : undefined)
             return (
               <li key={event.eventId} className="flex items-center gap-2.5 rounded-xl border border-border-soft bg-surface p-2.5">
                 <div className="h-9.5 w-9.5 flex-none rounded-lg bg-surface-alt" />

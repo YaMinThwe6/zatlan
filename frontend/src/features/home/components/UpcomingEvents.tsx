@@ -56,7 +56,13 @@ export function UpcomingEvents() {
       {items.length === 0 && <p className="text-sm text-text-muted">No public events coming up yet — be the first to host one.</p>}
       <ul className="flex flex-col gap-3">
         {items.map((event) => {
-          const status = joinStatus[event.eventId]
+          // joinStatus only ever records a change made THIS session (via
+          // handleJoin) — event.joined is the real, persisted answer from
+          // the backend, so it's the fallback rather than always starting
+          // "un-joined" until clicked. Without this, the button reverted to
+          // "Join" on every refresh even for an event already joined (or
+          // one's own hosted event, always auto-joined).
+          const status = joinStatus[event.eventId] ?? (event.joined ? 'joined' : undefined)
           const poster = posterUrl(event.moviePoster)
           return (
             <li key={event.eventId} className="flex items-center gap-3 rounded-2xl border border-border-soft bg-surface p-3">

@@ -8,7 +8,7 @@ export async function postEvent(req: Request, res: Response): Promise<void> {
 }
 
 export async function getUpcomingEvents(req: Request, res: Response): Promise<void> {
-  const result = await eventsService.listUpcomingEvents(req.query.limit, req.query.movieId);
+  const result = await eventsService.listUpcomingEvents(req.query.limit, req.query.movieId, req.uid);
   Responder.success(res, result);
 }
 

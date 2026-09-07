@@ -116,7 +116,10 @@ export function EventsPage() {
 
             {!loading &&
               items.map((event) => {
-                const status = joinStatus[event.eventId]
+                // See Home's UpcomingEvents.tsx for why this falls back to
+                // event.joined — joinStatus alone starts empty on every load,
+                // including for the caller's own event mixed into "Upcoming".
+                const status = joinStatus[event.eventId] ?? (event.joined ? 'joined' : undefined)
                 const poster = posterUrl(event.moviePoster)
                 return (
                   <div

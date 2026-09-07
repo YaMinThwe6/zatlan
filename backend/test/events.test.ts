@@ -270,6 +270,29 @@ describe("GET /events/upcoming", () => {
     expect(res.body.data.items).toHaveLength(1);
   });
 
+  it("reports joined:false for a guest with no token — nothing to check them against", async () => {
+    store.set("events/soon", { hostId: "host-1", movieId: "movie-1", visibility: "public", datetime: new Date("2099-06-01"), participantCount: 1, participantLimit: 5, requiresApproval: false });
+    const app = createApp();
+    const res = await request(app).get("/events/upcoming");
+    expect(res.body.data.items[0].joined).toBe(false);
+  });
+
+  it("reports joined:true for an event the authenticated caller has already joined — real bug: without this, Home's Join button reverts on every refresh even after actually joining", async () => {
+    store.set("events/soon", { hostId: "host-1", movieId: "movie-1", visibility: "public", datetime: new Date("2099-06-01"), participantCount: 2, participantLimit: 5, requiresApproval: false });
+    store.set("events/soon/participants/host-1", { joinedAt: new Date() });
+    const app = createApp(); // currentUid stays "host-1"
+    const res = await authed(app, "get", "/events/upcoming");
+    expect(res.body.data.items[0].joined).toBe(true);
+  });
+
+  it("reports joined:false for an authenticated caller who hasn't joined", async () => {
+    store.set("events/soon", { hostId: "host-1", movieId: "movie-1", visibility: "public", datetime: new Date("2099-06-01"), participantCount: 1, participantLimit: 5, requiresApproval: false });
+    currentUid = "guest-1";
+    const app = createApp();
+    const res = await authed(app, "get", "/events/upcoming");
+    expect(res.body.data.items[0].joined).toBe(false);
+  });
+
   it("shows area/city but never the exact coordinates, even for the caller who hosts the event", async () => {
     store.set("events/soon", {
       hostId: "host-1", // currentUid defaults to "host-1" — this caller hosts it

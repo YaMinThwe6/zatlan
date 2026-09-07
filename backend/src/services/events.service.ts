@@ -55,7 +55,15 @@ function isValidLocationInput(location: unknown): location is { area: string; ci
 // browsing events; the exact meeting spot is only revealed to the host or
 // someone who has actually joined. Callers decide `canSeePrecise` per
 // endpoint (see each call site below) — never trust a client-supplied flag.
-function toEventSummary(id: string, data: FirebaseFirestore.DocumentData, canSeePrecise: boolean): EventSummary {
+//
+// `joined` is a SEPARATE flag, not derived from canSeePrecise — the two
+// don't coincide at every call site (listUpcomingEvents/listNearbyEvents
+// hardcode canSeePrecise for privacy reasons regardless of actual join
+// status). Without this, every list of events started every page load with
+// no way to know the caller had already joined something — the frontend's
+// local-only "joined" UI state reset to "Join" on every refresh even for an
+// event the caller (or the host, for their own event) had already joined.
+function toEventSummary(id: string, data: FirebaseFirestore.DocumentData, canSeePrecise: boolean, joined: boolean): EventSummary {
   const rawLocation = data.location as { area?: unknown; city?: unknown; lat?: unknown; lng?: unknown } | null | undefined;
   const hasLocation = typeof rawLocation === "object" && rawLocation !== null;
   return {
@@ -73,8 +81,19 @@ function toEventSummary(id: string, data: FirebaseFirestore.DocumentData, canSee
     participantCount: data.participantCount ?? 0,
     requiresApproval: data.requiresApproval,
     roomId: data.roomId,
-    createdAt: toIso(data.createdAt)
+    createdAt: toIso(data.createdAt),
+    joined
   };
+}
+
+// Shared by listUpcomingEvents/listNearbyEvents below — a plain participant
+// existence check per event, only when there's actually a caller to check
+// (a guest browsing /events/upcoming with no token has nothing to check
+// against, and always gets joined:false).
+async function checkJoined(db: FirebaseFirestore.Firestore, eventId: string, callerUid: string | undefined): Promise<boolean> {
+  if (!callerUid) return false;
+  const snap = await db.collection("events").doc(eventId).collection("participants").doc(callerUid).get();
+  return snap.exists;
 }
 
 export interface CreateEventInput {
@@ -184,7 +203,7 @@ export async function createEvent(hostId: string, body: CreateEventInput, option
   }
   await batch.commit();
 
-  return toEventSummary(eventRef.id, eventDoc, true); // the host just created it — always a participant
+  return toEventSummary(eventRef.id, eventDoc, true, true); // the host just created it — always a participant
 }
 
 // GET /events/upcoming — public events browse/upcoming list (schema.md §6's
@@ -192,7 +211,7 @@ export async function createEvent(hostId: string, body: CreateEventInput, option
 // Home's "Upcoming watch events" section, and — with `movieId` given — movie
 // detail's "Watch together" right-rail section (api-contracts.md §8): same
 // query, narrowed to one movie rather than a whole extra endpoint.
-export async function listUpcomingEvents(rawLimit: unknown, rawMovieId?: unknown): Promise<{ items: UpcomingEvent[] }> {
+export async function listUpcomingEvents(rawLimit: unknown, rawMovieId?: unknown, callerUid?: string): Promise<{ items: UpcomingEvent[] }> {
   const db = requireDb();
   const parsedLimit = Number(rawLimit);
   const limit = Number.isFinite(parsedLimit) && parsedLimit > 0 ? Math.min(parsedLimit, MAX_UPCOMING_LIMIT) : DEFAULT_UPCOMING_LIMIT;
@@ -215,11 +234,11 @@ export async function listUpcomingEvents(rawLimit: unknown, rawMovieId?: unknown
       .filter((d) => d.data().deleted !== true)
       .map(async (d) => {
         const data = d.data();
-        const movieSnap = await db.collection("movies").doc(data.movieId).get();
+        const [movieSnap, joined] = await Promise.all([db.collection("movies").doc(data.movieId).get(), checkJoined(db, d.id, callerUid)]);
         return {
           // Browse-list — never the exact spot, joined or not (hld.md §9's
           // pre-join privacy rule): area/city is enough to judge interest.
-          ...toEventSummary(d.id, data, false),
+          ...toEventSummary(d.id, data, false, joined),
           movieTitle: movieSnap.data()?.title ?? null,
           moviePoster: movieSnap.data()?.poster ?? null
         };
@@ -434,12 +453,12 @@ export async function listNearbyEvents(callerUid: string, rawLat: unknown, rawLn
 
   const items: NearbyEvent[] = await Promise.all(
     candidates.map(async ({ id, data, distanceKm }) => {
-      const movieSnap = await db.collection("movies").doc(data.movieId).get();
+      const [movieSnap, joined] = await Promise.all([db.collection("movies").doc(data.movieId).get(), checkJoined(db, id, callerUid)]);
       return {
         // The nearby map (NearbyEventsMap.tsx) needs a real pin for every
         // candidate it plots — left as-is, out of scope for the pre-join
         // area/city-only rule (a separate, larger design question).
-        ...toEventSummary(id, data, true),
+        ...toEventSummary(id, data, true, joined),
         movieTitle: movieSnap.data()?.title ?? null,
         moviePoster: movieSnap.data()?.poster ?? null,
         distanceKm: Math.round(distanceKm * 10) / 10
@@ -493,7 +512,7 @@ export async function getEvent(eventId: string, callerUid: string): Promise<Even
         : "none";
 
   return {
-    ...toEventSummary(eventSnap.id, data, canSeePrecise),
+    ...toEventSummary(eventSnap.id, data, canSeePrecise, isParticipant),
     movieTitle: movieSnap.data()?.title ?? null,
     moviePoster: movieSnap.data()?.poster ?? null,
     hostDisplayName: hostSnap.data()?.displayName ?? "Unknown",
@@ -523,7 +542,7 @@ export async function listHostedEvents(uid: string): Promise<{ items: UpcomingEv
         const data = d.data();
         const movieSnap = await db.collection("movies").doc(data.movieId).get();
         return {
-          ...toEventSummary(d.id, data, true), // the host always sees their own event's exact location
+          ...toEventSummary(d.id, data, true, true), // the host always sees their own event's exact location, and always joined it (host auto-joins on create)
           movieTitle: movieSnap.data()?.title ?? null,
           moviePoster: movieSnap.data()?.poster ?? null
         };

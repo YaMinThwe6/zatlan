@@ -42,6 +42,7 @@ const events = [
     joinCode: null,
     roomId: 'room-1',
     createdAt: null,
+    joined: false,
     movieTitle: 'Interstellar',
     moviePoster: null,
     distanceKm: 1.2
@@ -62,6 +63,7 @@ const events = [
     joinCode: null,
     roomId: 'room-2',
     createdAt: null,
+    joined: false,
     movieTitle: 'Dune',
     moviePoster: null,
     distanceKm: 3.4

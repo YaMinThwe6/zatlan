@@ -33,6 +33,11 @@ export interface EventSummary {
   requiresApproval: boolean
   roomId: string // hld.md §16 — every event has exactly one chat room
   createdAt: string | null
+  // Whether the caller has already joined — false for a signed-out guest
+  // (nothing to check them against) rather than omitted, so the frontend's
+  // Join/Joined button state can be initialized correctly on first render
+  // instead of always starting as "Join" until clicked.
+  joined: boolean
 }
 
 // GET /events/upcoming item — EventSummary joined with the movie it's for.

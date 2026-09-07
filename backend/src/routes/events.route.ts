@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { requireAuth } from "../middleware/auth.js";
+import { requireAuth, optionalAuth } from "../middleware/auth.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import {
   postEvent,
@@ -20,7 +20,10 @@ export const eventsRouter = Router();
 eventsRouter.post("/events", requireAuth, asyncHandler(postEvent));
 // Public — guest Discover's event teaser needs this too (never returns
 // precise location either way, see events.service.ts's listUpcomingEvents).
-eventsRouter.get("/events/upcoming", asyncHandler(getUpcomingEvents));
+// optionalAuth (not requireAuth): stays reachable without a token, but picks
+// up req.uid when one is given, so Home's signed-in call to this same
+// endpoint gets each event's real `joined` status back.
+eventsRouter.get("/events/upcoming", optionalAuth, asyncHandler(getUpcomingEvents));
 eventsRouter.get("/events/nearby", requireAuth, asyncHandler(getNearbyEvents));
 // Kept above the ":eventId" routes below for the same shadowing reason as
 // "upcoming"/"nearby" — a literal path segment has to be registered before
