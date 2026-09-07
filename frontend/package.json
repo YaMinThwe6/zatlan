@@ -6,8 +6,10 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "build:local": "tsc -b && vite build --mode localstart",
     "lint": "eslint .",
     "preview": "vite preview",
+    "start:local": "vite preview --port 4173",
     "test": "vitest run",
     "test:watch": "vitest"
   },
