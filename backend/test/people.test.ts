@@ -537,6 +537,19 @@ describe("GET /discover/people", () => {
     expect(res.body.data.items.map((p: { uid: string }) => p.uid)).toEqual(["u1"]);
   });
 
+  it("excludes a user who opted out via hideFromDiscovery, even with the most followers", async () => {
+    store.set("users/u1", { displayName: "Rohan", createdAt: new Date("2026-01-01"), hideFromDiscovery: true });
+    store.set("users/u2", { displayName: "Meera", createdAt: new Date("2026-01-02") });
+    store.set("users/u1/followers/f1", { createdAt: new Date() });
+    store.set("users/u1/followers/f2", { createdAt: new Date() });
+    store.set("users/u2/followers/f1", { createdAt: new Date() });
+
+    const app = createApp();
+    const res = await request(app).get("/discover/people");
+
+    expect(res.body.data.items.map((p: { uid: string }) => p.uid)).toEqual(["u2"]);
+  });
+
   it("returns an empty list when nobody has any followers yet, rather than fabricating sample data", async () => {
     store.set("users/u1", { displayName: "Rohan", createdAt: new Date() });
     const app = createApp();

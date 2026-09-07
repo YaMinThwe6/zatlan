@@ -45,6 +45,7 @@ const baseMe = {
   notificationPrefs: { emailEnabled: true },
   themePreference: 'dark' as const,
   accentTheme: 'emerald' as const,
+  hideFromDiscovery: false,
   isNewUser: false
 }
 
@@ -191,6 +192,20 @@ describe('Settings', () => {
     fireEvent.click(screen.getByRole('switch', { name: /approve followers manually/i }))
 
     await waitFor(() => expect(updateMe).toHaveBeenCalledWith({ followRequiresApproval: true }))
+    await waitFor(() => expect(onUpdateMe).toHaveBeenCalledWith(updated))
+  })
+
+  it('toggles "Hide me from public Discover suggestions"', async () => {
+    const updated = { ...baseMe, hideFromDiscovery: true }
+    updateMe.mockResolvedValue(updated)
+    const { onUpdateMe } = renderSettings()
+
+    const toggle = screen.getByRole('switch', { name: /hide me from public discover suggestions/i })
+    expect(toggle).toHaveAttribute('aria-checked', 'false')
+    fireEvent.click(toggle)
+
+    expect(onUpdateMe).toHaveBeenCalledWith(expect.objectContaining({ hideFromDiscovery: true })) // optimistic
+    await waitFor(() => expect(updateMe).toHaveBeenCalledWith({ hideFromDiscovery: true }))
     await waitFor(() => expect(onUpdateMe).toHaveBeenCalledWith(updated))
   })
 

@@ -159,7 +159,7 @@ export function Settings({ me, onUpdateMe }: Props) {
     }
   }
 
-  async function togglePrivacyField(field: 'listVisible' | 'followRequiresApproval') {
+  async function togglePrivacyField(field: 'listVisible' | 'followRequiresApproval' | 'hideFromDiscovery') {
     const next = !me[field]
     onUpdateMe({ ...me, [field]: next }) // optimistic, same pattern as Profile.tsx's toggleConnect
     try {
@@ -319,12 +319,23 @@ export function Settings({ me, onUpdateMe }: Props) {
             </div>
             <ToggleSwitch checked={me.listVisible} onChange={() => togglePrivacyField('listVisible')} label="Show my watched list" />
           </div>
-          <div className="flex items-center gap-3.5 px-4.5 py-4">
+          <div className="flex items-center gap-3.5 border-b border-border-soft px-4.5 py-4">
             <div className="flex-1">
               <p className="text-[13px] font-semibold text-text">Approve followers manually</p>
               <p className="mt-0.5 text-[11px] text-text-muted">People send a request instead of following instantly.</p>
             </div>
             <ToggleSwitch checked={me.followRequiresApproval} onChange={() => togglePrivacyField('followRequiresApproval')} label="Approve followers manually" />
+          </div>
+          <div className="flex items-center gap-3.5 px-4.5 py-4">
+            <div className="flex-1">
+              <p className="text-[13px] font-semibold text-text">Hide me from public Discover suggestions</p>
+              <p className="mt-0.5 text-[11px] text-text-muted">Keeps you out of "People you might vibe with" for visitors who haven't signed in yet.</p>
+            </div>
+            <ToggleSwitch
+              checked={me.hideFromDiscovery}
+              onChange={() => togglePrivacyField('hideFromDiscovery')}
+              label="Hide me from public Discover suggestions"
+            />
           </div>
         </div>
       </section>

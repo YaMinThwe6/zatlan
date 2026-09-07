@@ -21,6 +21,11 @@ interface UserDoc {
   notificationPrefs: { emailEnabled: boolean };
   themePreference: "dark" | "light" | "system";
   accentTheme: "emerald" | "cyan" | "purple" | "pink" | "amber" | "red";
+  // Settings' opt-out of GET /discover/people (people.service.ts's
+  // getTopFollowedPeople) — the signed-out Discover page's "top followed
+  // users" teaser. Distinct from listVisible (gates the watched list, not
+  // whether a user's name/photo gets surfaced to anonymous visitors at all).
+  hideFromDiscovery: boolean;
 }
 
 interface Claims {
@@ -57,7 +62,8 @@ function buildDefaultUserDoc(uid: string, claims: Claims): UserDoc {
     onboardingComplete: false,
     notificationPrefs: { emailEnabled: true },
     themePreference: "dark",
-    accentTheme: "emerald"
+    accentTheme: "emerald",
+    hideFromDiscovery: false
   };
 }
 
@@ -109,6 +115,7 @@ const SIMPLE_PATCHABLE_FIELDS = [
   "onboardingComplete",
   "themePreference",
   "accentTheme",
+  "hideFromDiscovery",
   // Settings' "Email me about activity" toggle (frontend/src/features/settings) —
   // notificationPrefs existed on UserProfile/UserDoc since onboarding, but PATCH
   // never accepted it. Same plain pass-through as every other field here; no

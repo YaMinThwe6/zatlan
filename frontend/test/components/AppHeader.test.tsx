@@ -25,6 +25,7 @@ const me = {
   notificationPrefs: { emailEnabled: true },
   themePreference: 'dark' as const,
   accentTheme: 'emerald' as const,
+  hideFromDiscovery: false,
   isNewUser: false
 }
 

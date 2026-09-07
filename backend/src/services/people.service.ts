@@ -135,14 +135,17 @@ async function getSuggestedMatches(db: FirebaseFirestore.Firestore, uid: string)
 // choice PeopleYouMightVibeWith already makes for signed-in users. Anyone
 // with zero followers is excluded rather than shown with "0" — real social
 // proof or nothing, never a number that undercuts the point of showing this
-// at all. Bounded fan-out like getSuggestedMatches above; revisit with a
+// at all. Anyone with hideFromDiscovery set (Settings' opt-out) is excluded
+// outright, regardless of follower count — being featured here is opt-out,
+// not just unlisted-by-omission the way privacy elsewhere in this file works.
+// Bounded fan-out like getSuggestedMatches above; revisit with a
 // denormalized followerCount field before this needs to scale past that —
 // every anonymous visitor to Discover hits this, unlike the authenticated
 // endpoints elsewhere in this file.
 export async function getTopFollowedPeople(): Promise<{ items: TopFollowedPerson[] }> {
   const db = requireDb();
   const snap = await db.collection("users").orderBy("createdAt", "desc").get();
-  const pool = snap.docs.slice(0, TOP_FOLLOWED_POOL_LIMIT);
+  const pool = snap.docs.filter((d) => d.data().hideFromDiscovery !== true).slice(0, TOP_FOLLOWED_POOL_LIMIT);
   if (pool.length === 0) return { items: [] };
 
   const items = await Promise.all(
