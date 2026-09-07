@@ -96,6 +96,13 @@ async function checkJoined(db: FirebaseFirestore.Firestore, eventId: string, cal
   return snap.exists;
 }
 
+// Shared by every UpcomingEvent-shaped list below (upcoming/nearby/hosting)
+// — the Events page card's "Hosted by" line.
+async function getHostDisplayName(db: FirebaseFirestore.Firestore, hostId: string): Promise<string> {
+  const snap = await db.collection("users").doc(hostId).get();
+  return (snap.data()?.displayName as string | undefined) ?? "Unknown";
+}
+
 export interface CreateEventInput {
   movieId?: unknown;
   datetime?: unknown;
@@ -234,13 +241,18 @@ export async function listUpcomingEvents(rawLimit: unknown, rawMovieId?: unknown
       .filter((d) => d.data().deleted !== true)
       .map(async (d) => {
         const data = d.data();
-        const [movieSnap, joined] = await Promise.all([db.collection("movies").doc(data.movieId).get(), checkJoined(db, d.id, callerUid)]);
+        const [movieSnap, joined, hostDisplayName] = await Promise.all([
+          db.collection("movies").doc(data.movieId).get(),
+          checkJoined(db, d.id, callerUid),
+          getHostDisplayName(db, data.hostId)
+        ]);
         return {
           // Browse-list — never the exact spot, joined or not (hld.md §9's
           // pre-join privacy rule): area/city is enough to judge interest.
           ...toEventSummary(d.id, data, false, joined),
           movieTitle: movieSnap.data()?.title ?? null,
-          moviePoster: movieSnap.data()?.poster ?? null
+          moviePoster: movieSnap.data()?.poster ?? null,
+          hostDisplayName
         };
       })
   );
@@ -453,7 +465,11 @@ export async function listNearbyEvents(callerUid: string, rawLat: unknown, rawLn
 
   const items: NearbyEvent[] = await Promise.all(
     candidates.map(async ({ id, data, distanceKm }) => {
-      const [movieSnap, joined] = await Promise.all([db.collection("movies").doc(data.movieId).get(), checkJoined(db, id, callerUid)]);
+      const [movieSnap, joined, hostDisplayName] = await Promise.all([
+        db.collection("movies").doc(data.movieId).get(),
+        checkJoined(db, id, callerUid),
+        getHostDisplayName(db, data.hostId)
+      ]);
       return {
         // The nearby map (NearbyEventsMap.tsx) needs a real pin for every
         // candidate it plots — left as-is, out of scope for the pre-join
@@ -461,6 +477,7 @@ export async function listNearbyEvents(callerUid: string, rawLat: unknown, rawLn
         ...toEventSummary(id, data, true, joined),
         movieTitle: movieSnap.data()?.title ?? null,
         moviePoster: movieSnap.data()?.poster ?? null,
+        hostDisplayName,
         distanceKm: Math.round(distanceKm * 10) / 10
       };
     })
@@ -528,12 +545,10 @@ export async function getEvent(eventId: string, callerUid: string): Promise<Even
 // host themself already has full visibility into their own event.
 export async function listHostedEvents(uid: string): Promise<{ items: UpcomingEvent[] }> {
   const db = requireDb();
-  const snap = await db
-    .collection("events")
-    .where("hostId", "==", uid)
-    .where("datetime", ">=", new Date())
-    .orderBy("datetime", "asc")
-    .get();
+  const [snap, hostDisplayName] = await Promise.all([
+    db.collection("events").where("hostId", "==", uid).where("datetime", ">=", new Date()).orderBy("datetime", "asc").get(),
+    getHostDisplayName(db, uid) // every item's host is the caller — one lookup, not one per event
+  ]);
 
   const items: UpcomingEvent[] = await Promise.all(
     snap.docs
@@ -543,6 +558,7 @@ export async function listHostedEvents(uid: string): Promise<{ items: UpcomingEv
         const movieSnap = await db.collection("movies").doc(data.movieId).get();
         return {
           ...toEventSummary(d.id, data, true, true), // the host always sees their own event's exact location, and always joined it (host auto-joins on create)
+          hostDisplayName,
           movieTitle: movieSnap.data()?.title ?? null,
           moviePoster: movieSnap.data()?.poster ?? null
         };

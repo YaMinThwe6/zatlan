@@ -40,10 +40,12 @@ export interface EventSummary {
   joined: boolean
 }
 
-// GET /events/upcoming item — EventSummary joined with the movie it's for.
+// GET /events/upcoming item — EventSummary joined with the movie it's for,
+// and the host's displayName (the Events page card's "Hosted by" line).
 export interface UpcomingEvent extends EventSummary {
   movieTitle: string | null
   moviePoster: string | null
+  hostDisplayName: string
 }
 
 // GET /events/nearby item — hld.md §9. Same shape as UpcomingEvent, plus the
@@ -52,13 +54,11 @@ export interface NearbyEvent extends UpcomingEvent {
   distanceKm: number
 }
 
-// GET /events/:eventId — same fields as UpcomingEvent, plus the host's name
-// for the detail page's "Hosted by" line (list endpoints don't join this in —
-// it'd be an extra per-item lookup they don't need), and the caller's own
-// relationship to the event so the Join/Requested/Chat button renders
-// correctly on first load, not just after clicking something.
+// GET /events/:eventId — same fields as UpcomingEvent (hostDisplayName
+// included), plus the caller's own relationship to the event so the
+// Join/Requested/Chat button renders correctly on first load, not just
+// after clicking something.
 export interface EventDetail extends UpcomingEvent {
-  hostDisplayName: string
   viewerStatus: 'host' | 'joined' | 'pending' | 'none'
 }
 

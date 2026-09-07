@@ -25,6 +25,13 @@ async function getRelationship(db: FirebaseFirestore.Firestore, callerUid: strin
   return followingSnap.exists ? "following" : requestSnap.exists ? "pending" : "none";
 }
 
+// Shared by every TasteMatch-producing tier below — the People Discovery
+// card's follower-count line.
+async function getFollowerCount(db: FirebaseFirestore.Firestore, uid: string): Promise<number> {
+  const snap = await db.collection("users").doc(uid).collection("followers").get();
+  return snap.docs.length;
+}
+
 // Shared by every fallback tier below: overlap on an array field the caller
 // picked at onboarding (favoriteGenres or preferredLanguages). Both are live,
 // unlike the precomputed tasteMatches tier, so they're cheap fallbacks rather
@@ -48,13 +55,16 @@ async function getArrayOverlapMatches(
         const data = d.data();
         const values = (data[field] as string[] | null) ?? [];
         const overlap = values.filter((v) => callerValues.includes(v)).length;
+        const [relationship, followerCount] = await Promise.all([getRelationship(db, uid, d.id), getFollowerCount(db, d.id)]);
         return {
           uid: d.id,
           displayName: data.displayName ?? "Unknown",
           photoURL: (data.photoURL as string | null) ?? null,
           score: Math.round((overlap / callerValues.length) * 100),
-          relationship: await getRelationship(db, uid, d.id),
-          matchReason
+          relationship,
+          matchReason,
+          favoriteGenres: (data.favoriteGenres as string[] | null) ?? [],
+          followerCount
         };
       })
   );
@@ -120,7 +130,9 @@ async function getSuggestedMatches(db: FirebaseFirestore.Firestore, uid: string)
         photoURL: (data.photoURL as string | null) ?? null,
         score: Math.round(combined * 100),
         relationship: await getRelationship(db, uid, d.id),
-        matchReason: "suggested"
+        matchReason: "suggested",
+        favoriteGenres: (data.favoriteGenres as string[] | null) ?? [],
+        followerCount: followerCounts[index] // already fetched above for the recency+follower score itself
       };
     })
   );
@@ -194,15 +206,21 @@ export async function getTasteMatches(uid: string, limit: number = COLD_START_MA
   const tasteSnap = await db.collection("users").doc(uid).collection("tasteMatches").orderBy("score", "desc").get();
   const tasteMatches = await Promise.all(
     tasteSnap.docs.map(async (matchDoc): Promise<TasteMatch> => {
-      const targetSnap = await db.collection("users").doc(matchDoc.id).get();
+      const [targetSnap, relationship, followerCount] = await Promise.all([
+        db.collection("users").doc(matchDoc.id).get(),
+        getRelationship(db, uid, matchDoc.id),
+        getFollowerCount(db, matchDoc.id)
+      ]);
       const data = targetSnap.data();
       return {
         uid: matchDoc.id,
         displayName: (data?.displayName as string) ?? "Unknown",
         photoURL: (data?.photoURL as string | null) ?? null,
         score: matchDoc.data().score,
-        relationship: await getRelationship(db, uid, matchDoc.id),
-        matchReason: "tasteMatch"
+        relationship,
+        matchReason: "tasteMatch",
+        favoriteGenres: (data?.favoriteGenres as string[] | null) ?? [],
+        followerCount
       };
     })
   );

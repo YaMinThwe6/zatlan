@@ -115,8 +115,8 @@ describe("GET /users/me/tasteMatches", () => {
 
     expect(res.status).toBe(200);
     expect(res.body.data.items).toEqual([
-      { uid: "uid-3", displayName: "Meera", photoURL: null, score: 91, relationship: "pending", matchReason: "tasteMatch" },
-      { uid: "uid-2", displayName: "Rohan", photoURL: null, score: 84, relationship: "following", matchReason: "tasteMatch" }
+      { uid: "uid-3", displayName: "Meera", photoURL: null, score: 91, relationship: "pending", matchReason: "tasteMatch", favoriteGenres: [], followerCount: 0 },
+      { uid: "uid-2", displayName: "Rohan", photoURL: null, score: 84, relationship: "following", matchReason: "tasteMatch", favoriteGenres: [], followerCount: 0 }
     ]);
   });
 
@@ -141,8 +141,8 @@ describe("GET /users/me/tasteMatches", () => {
 
     expect(res.status).toBe(200);
     expect(res.body.data.items).toEqual([
-      { uid: "uid-3", displayName: "Meera", photoURL: null, score: 100, relationship: "none", matchReason: "genreOverlap" },
-      { uid: "uid-2", displayName: "Rohan", photoURL: null, score: 50, relationship: "none", matchReason: "genreOverlap" }
+      { uid: "uid-3", displayName: "Meera", photoURL: null, score: 100, relationship: "none", matchReason: "genreOverlap", favoriteGenres: ["Science Fiction", "Drama", "Horror"], followerCount: 0 },
+      { uid: "uid-2", displayName: "Rohan", photoURL: null, score: 50, relationship: "none", matchReason: "genreOverlap", favoriteGenres: ["Science Fiction", "Comedy"], followerCount: 0 }
     ]);
   });
 
@@ -166,8 +166,8 @@ describe("GET /users/me/tasteMatches", () => {
 
     expect(res.status).toBe(200);
     expect(res.body.data.items).toEqual([
-      { uid: "uid-3", displayName: "Dev", photoURL: null, score: 100, relationship: "none", matchReason: "languageOverlap" },
-      { uid: "uid-2", displayName: "Priya", photoURL: null, score: 50, relationship: "none", matchReason: "languageOverlap" }
+      { uid: "uid-3", displayName: "Dev", photoURL: null, score: 100, relationship: "none", matchReason: "languageOverlap", favoriteGenres: [], followerCount: 0 },
+      { uid: "uid-2", displayName: "Priya", photoURL: null, score: 50, relationship: "none", matchReason: "languageOverlap", favoriteGenres: [], followerCount: 0 }
     ]);
   });
 
@@ -181,7 +181,7 @@ describe("GET /users/me/tasteMatches", () => {
     const app = createApp();
     const res = await request(app).get("/users/me/tasteMatches").set("Authorization", "Bearer good");
 
-    expect(res.body.data.items).toEqual([{ uid: "uid-2", displayName: "Sam", photoURL: null, score: 100, relationship: "none", matchReason: "genreOverlap" }]);
+    expect(res.body.data.items).toEqual([{ uid: "uid-2", displayName: "Sam", photoURL: null, score: 100, relationship: "none", matchReason: "genreOverlap", favoriteGenres: ["Drama"], followerCount: 1 }]);
   });
 
   it("falls all the way through to the suggested tier (recency + follower blend) when the caller has no genre, language, or precomputed signal at all", async () => {
@@ -197,9 +197,9 @@ describe("GET /users/me/tasteMatches", () => {
 
     expect(res.status).toBe(200);
     expect(res.body.data.items).toEqual([
-      { uid: "uid-3", displayName: "Top", photoURL: null, score: 100, relationship: "none", matchReason: "suggested" },
-      { uid: "uid-4", displayName: "Mid", photoURL: null, score: 25, relationship: "none", matchReason: "suggested" },
-      { uid: "uid-2", displayName: "Low", photoURL: null, score: 0, relationship: "none", matchReason: "suggested" }
+      { uid: "uid-3", displayName: "Top", photoURL: null, score: 100, relationship: "none", matchReason: "suggested", favoriteGenres: [], followerCount: 3 },
+      { uid: "uid-4", displayName: "Mid", photoURL: null, score: 25, relationship: "none", matchReason: "suggested", favoriteGenres: [], followerCount: 0 },
+      { uid: "uid-2", displayName: "Low", photoURL: null, score: 0, relationship: "none", matchReason: "suggested", favoriteGenres: [], followerCount: 0 }
     ]);
   });
 
@@ -211,7 +211,7 @@ describe("GET /users/me/tasteMatches", () => {
     const app = createApp();
     const res = await request(app).get("/users/me/tasteMatches").set("Authorization", "Bearer good");
 
-    expect(res.body.data.items).toEqual([{ uid: "uid-3", displayName: "Visible", photoURL: null, score: 50, relationship: "none", matchReason: "suggested" }]);
+    expect(res.body.data.items).toEqual([{ uid: "uid-3", displayName: "Visible", photoURL: null, score: 50, relationship: "none", matchReason: "suggested", favoriteGenres: [], followerCount: 0 }]);
   });
 
   it("tops up a sparse precomputed list with the suggested tier instead of returning it as-is", async () => {
@@ -225,9 +225,9 @@ describe("GET /users/me/tasteMatches", () => {
     const res = await request(app).get("/users/me/tasteMatches").set("Authorization", "Bearer good");
 
     expect(res.body.data.items).toEqual([
-      { uid: "uid-2", displayName: "Precomputed Friend", photoURL: null, score: 80, relationship: "none", matchReason: "tasteMatch" },
-      { uid: "uid-3", displayName: "Nadia", photoURL: null, score: 100, relationship: "none", matchReason: "suggested" },
-      { uid: "uid-4", displayName: "Omar", photoURL: null, score: 25, relationship: "none", matchReason: "suggested" }
+      { uid: "uid-2", displayName: "Precomputed Friend", photoURL: null, score: 80, relationship: "none", matchReason: "tasteMatch", favoriteGenres: [], followerCount: 0 },
+      { uid: "uid-3", displayName: "Nadia", photoURL: null, score: 100, relationship: "none", matchReason: "suggested", favoriteGenres: [], followerCount: 1 },
+      { uid: "uid-4", displayName: "Omar", photoURL: null, score: 25, relationship: "none", matchReason: "suggested", favoriteGenres: [], followerCount: 0 }
     ]);
   });
 

@@ -11,6 +11,8 @@ function person(overrides: Partial<TasteMatch> = {}): TasteMatch {
     score: 84,
     relationship: 'none',
     matchReason: 'tasteMatch',
+    favoriteGenres: [],
+    followerCount: 0,
     ...overrides
   }
 }

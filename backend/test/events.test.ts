@@ -262,6 +262,14 @@ describe("GET /events/upcoming", () => {
     expect(res.body.data.items[0].movieTitle).toBe("Dune: Part Two");
   });
 
+  it("joins the host's displayName into each item — the Events page card's \"Hosted by\" line", async () => {
+    store.set("users/host-1", { displayName: "Meera" });
+    store.set("events/soon", { hostId: "host-1", movieId: "movie-1", visibility: "public", datetime: new Date("2099-06-01"), participantCount: 1, participantLimit: 5, requiresApproval: false });
+    const app = createApp();
+    const res = await authed(app, "get", "/events/upcoming");
+    expect(res.body.data.items[0].hostDisplayName).toBe("Meera");
+  });
+
   it("is reachable without a token — the guest Discover page's events teaser needs this too", async () => {
     store.set("events/soon", { hostId: "host-1", movieId: "movie-1", visibility: "public", datetime: new Date("2099-06-01"), participantCount: 1, participantLimit: 5, requiresApproval: false });
     const app = createApp();
@@ -609,6 +617,52 @@ describe("GET /events/nearby", () => {
     const res = await authed(app, "get", `/events/nearby?lat=${bangalore.lat}&lng=${bangalore.lng}&radiusKm=10`);
     expect(res.status).toBe(200);
     expect(res.body.data.items.map((e: { title: string }) => e.title)).toEqual(["Close one", "Far one"]);
+  });
+
+  it("joins the host's displayName into each nearby item too", async () => {
+    store.set("users/host-1", { displayName: "Meera" });
+    const app = createApp();
+    await authed(app, "post", "/events").send(
+      inPersonBody({ location: { area: "Near MG Road", city: "Bangalore", ...bangaloreNearby } })
+    );
+
+    const res = await authed(app, "get", `/events/nearby?lat=${bangalore.lat}&lng=${bangalore.lng}&radiusKm=5`);
+    expect(res.body.data.items[0].hostDisplayName).toBe("Meera");
+  });
+});
+
+describe("GET /events/hosting", () => {
+  it("401s without a token", async () => {
+    const app = createApp();
+    const res = await request(app).get("/events/hosting");
+    expect(res.status).toBe(401);
+  });
+
+  it("returns every future event the caller hosts, public or private, sorted by datetime ascending — unlike /upcoming, a private watch party you're hosting still needs somewhere to manage it", async () => {
+    store.set("events/pub", { hostId: "host-1", movieId: "movie-1", visibility: "public", datetime: new Date("2099-06-01"), participantCount: 1, participantLimit: 5, requiresApproval: false });
+    store.set("events/priv", { hostId: "host-1", movieId: "movie-1", visibility: "private", datetime: new Date("2099-01-01"), participantCount: 1, participantLimit: 5, requiresApproval: false });
+    store.set("events/someone-elses", { hostId: "host-2", movieId: "movie-1", visibility: "public", datetime: new Date("2099-03-01"), participantCount: 1, participantLimit: 5, requiresApproval: false });
+    store.set("events/past", { hostId: "host-1", movieId: "movie-1", visibility: "public", datetime: new Date("2020-01-01"), participantCount: 1, participantLimit: 5, requiresApproval: false });
+
+    const app = createApp(); // currentUid stays "host-1"
+    const res = await authed(app, "get", "/events/hosting");
+    expect(res.status).toBe(200);
+    expect(res.body.data.items.map((e: { eventId: string }) => e.eventId)).toEqual(["priv", "pub"]);
+  });
+
+  it("excludes a soft-deleted event the caller hosts", async () => {
+    store.set("events/evt-1", { hostId: "host-1", movieId: "movie-1", visibility: "public", datetime: new Date("2099-01-01"), deleted: true, participantCount: 1, participantLimit: 5, requiresApproval: false });
+    const app = createApp();
+    const res = await authed(app, "get", "/events/hosting");
+    expect(res.body.data.items).toEqual([]);
+  });
+
+  it("joins the host's own displayName into each item too", async () => {
+    store.set("users/host-1", { displayName: "Meera" });
+    store.set("events/evt-1", { hostId: "host-1", movieId: "movie-1", visibility: "public", datetime: new Date("2099-01-01"), participantCount: 1, participantLimit: 5, requiresApproval: false });
+    const app = createApp();
+    const res = await authed(app, "get", "/events/hosting");
+    expect(res.body.data.items[0].hostDisplayName).toBe("Meera");
   });
 });
 

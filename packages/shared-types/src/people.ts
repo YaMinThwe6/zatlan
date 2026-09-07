@@ -32,6 +32,12 @@ export interface TasteMatch {
   score: number
   relationship: 'following' | 'pending' | 'none'
   matchReason: 'tasteMatch' | 'genreOverlap' | 'languageOverlap' | 'suggested'
+  // Added for the People Discovery page's richer card (Home's rail widget
+  // still only shows a compact version) — up to a couple of these render as
+  // tags, and followerCount as light social proof, same field
+  // TopFollowedPerson already uses on the signed-out Discover teaser.
+  favoriteGenres: string[]
+  followerCount: number
 }
 
 // GET /discover/people item — the signed-out Discover page's "People you

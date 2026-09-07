@@ -43,6 +43,7 @@ const events = [
     roomId: 'room-1',
     createdAt: null,
     joined: false,
+    hostDisplayName: 'Rohan',
     movieTitle: 'Interstellar',
     moviePoster: null,
     distanceKm: 1.2
@@ -64,6 +65,7 @@ const events = [
     roomId: 'room-2',
     createdAt: null,
     joined: false,
+    hostDisplayName: 'Host Two',
     movieTitle: 'Dune',
     moviePoster: null,
     distanceKm: 3.4
