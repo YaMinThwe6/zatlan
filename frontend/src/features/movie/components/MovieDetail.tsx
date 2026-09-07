@@ -19,6 +19,7 @@ import {
 import { WatchedByFriends } from './WatchedByFriends'
 import { SimilarPicks } from './SimilarPicks'
 import { WatchTogether } from './WatchTogether'
+import { WatchTogetherGuest } from './WatchTogetherGuest'
 import { useAuth } from '../../../lib/AuthContext'
 import { posterUrl } from '../../../lib/images'
 import { Sidebar } from '../../../components/Sidebar'
@@ -358,6 +359,11 @@ export function MovieDetail() {
             {!isGuest && (
               <section className="lg:flex-1">
                 <WatchedByFriends movieId={movieId} />
+              </section>
+            )}
+            {isGuest && (
+              <section className="lg:flex-1">
+                <WatchTogetherGuest movieId={movieId} />
               </section>
             )}
             <section className="lg:flex-1">

@@ -382,4 +382,24 @@ describe('MovieDetail — signed-out visitor (public Discover)', () => {
     fireEvent.click(screen.getByRole('button', { name: /sign in to write a review/i }))
     expect(await screen.findByText('Get started page')).toBeInTheDocument()
   })
+
+  it('shows a scheduled watch party for this movie with a Sign in to join CTA', async () => {
+    mockAuthUser(null)
+    mockDefaults()
+    getUpcomingEvents.mockResolvedValue({
+      items: [
+        {
+          eventId: 'e1', hostId: 'host-1', movieId: 'movie-1', title: 'Dune Watch Party', datetime: '2099-06-01T20:00:00.000Z',
+          mode: 'online', location: null, preciseLocation: null, visibility: 'public', joinCode: null,
+          participantLimit: 10, participantCount: 3, requiresApproval: false, roomId: 'r1', createdAt: null, joined: false,
+          movieTitle: 'Dune: Part Two', moviePoster: null
+        }
+      ]
+    })
+    renderWithRouter()
+
+    expect(await screen.findByText('Dune Watch Party')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /sign in to join/i }))
+    expect(await screen.findByText('Get started page')).toBeInTheDocument()
+  })
 })
