@@ -500,3 +500,47 @@ describe("GET /movies/:movieId/watchedBy", () => {
     expect(res.body.data.items).toEqual([]);
   });
 });
+
+describe("GET /discover/people", () => {
+  it("is reachable without a token — the signed-out Discover page's teaser needs this", async () => {
+    const app = createApp();
+    const res = await request(app).get("/discover/people");
+    expect(res.status).toBe(200);
+  });
+
+  it("returns real users ranked by follower count, descending", async () => {
+    store.set("users/u1", { displayName: "Rohan", createdAt: new Date("2026-01-01") });
+    store.set("users/u2", { displayName: "Meera", createdAt: new Date("2026-01-02") });
+    store.set("users/u1/followers/f1", { createdAt: new Date() });
+    store.set("users/u2/followers/f1", { createdAt: new Date() });
+    store.set("users/u2/followers/f2", { createdAt: new Date() });
+    store.set("users/u2/followers/f3", { createdAt: new Date() });
+
+    const app = createApp();
+    const res = await request(app).get("/discover/people");
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.items).toEqual([
+      { uid: "u2", displayName: "Meera", photoURL: null, followerCount: 3 },
+      { uid: "u1", displayName: "Rohan", photoURL: null, followerCount: 1 }
+    ]);
+  });
+
+  it("never includes a user with zero followers — real social proof or nothing, same as the signed-in taste-match teaser", async () => {
+    store.set("users/u1", { displayName: "Rohan", createdAt: new Date("2026-01-01") });
+    store.set("users/u2", { displayName: "NoFollowersYet", createdAt: new Date("2026-01-02") });
+    store.set("users/u1/followers/f1", { createdAt: new Date() });
+
+    const app = createApp();
+    const res = await request(app).get("/discover/people");
+
+    expect(res.body.data.items.map((p: { uid: string }) => p.uid)).toEqual(["u1"]);
+  });
+
+  it("returns an empty list when nobody has any followers yet, rather than fabricating sample data", async () => {
+    store.set("users/u1", { displayName: "Rohan", createdAt: new Date() });
+    const app = createApp();
+    const res = await request(app).get("/discover/people");
+    expect(res.body.data.items).toEqual([]);
+  });
+});

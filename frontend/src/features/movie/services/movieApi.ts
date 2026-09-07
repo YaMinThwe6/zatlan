@@ -1,6 +1,6 @@
 import { apiFetch } from '../../../lib/api'
-export type { MovieSummary, MovieDetail, MovieStatus, MovieStatusLite, MovieStatusMap, DiscoverMoviesResponse, Review, MyReview, WatchedByEntry, SimilarMovieItem } from '@binj/shared-types'
-import type { MovieSummary, MovieDetail, MovieStatus, MovieStatusMap, DiscoverMoviesResponse, Review, MyReview, WatchedByEntry, SimilarMovieItem } from '@binj/shared-types'
+export type { MovieSummary, MovieDetail, MovieStatus, MovieStatusLite, MovieStatusMap, DiscoverMoviesResponse, Review, MyReview, WatchedByEntry, SimilarMovieItem, TopFollowedPerson } from '@binj/shared-types'
+import type { MovieSummary, MovieDetail, MovieStatus, MovieStatusMap, DiscoverMoviesResponse, Review, MyReview, WatchedByEntry, SimilarMovieItem, TopFollowedPerson } from '@binj/shared-types'
 
 export function searchMovies(query: string): Promise<{ items: MovieSummary[] }> {
   return apiFetch(`/search/movies?q=${encodeURIComponent(query)}`)
@@ -90,4 +90,11 @@ export function getMovieWatchedBy(movieId: string): Promise<{ items: WatchedByEn
 // (movie detail's right rail).
 export function getSimilarMovies(movieId: string): Promise<{ items: SimilarMovieItem[] }> {
   return apiFetch(`/movies/${encodeURIComponent(movieId)}/similar`)
+}
+
+// No auth — public. The signed-out Discover page's "People you might vibe
+// with" teaser (DiscoverPeopleTeaser.tsx): real top-followed users, never
+// fabricated sample data.
+export function getTopFollowedPeople(): Promise<{ items: TopFollowedPerson[] }> {
+  return apiFetch('/discover/people')
 }

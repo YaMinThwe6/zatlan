@@ -6,7 +6,11 @@ const searchMovies = vi.fn()
 const getRecentMovies = vi.fn()
 const discoverMovies = vi.fn()
 const getMovieStatuses = vi.fn()
-vi.mock('../../../../src/features/movie/services/movieApi', () => ({ searchMovies, getRecentMovies, discoverMovies, getMovieStatuses }))
+// The guest right rail's DiscoverPeopleTeaser fetches this on mount — not
+// this file's focus, defaulted to empty in beforeEach below so it doesn't
+// need setup in every test.
+const getTopFollowedPeople = vi.fn()
+vi.mock('../../../../src/features/movie/services/movieApi', () => ({ searchMovies, getRecentMovies, discoverMovies, getMovieStatuses, getTopFollowedPeople }))
 
 // The guest right rail's DiscoverEventsTeaser fetches this on mount — not
 // this file's focus, defaulted to empty in beforeEach below so it doesn't
@@ -27,6 +31,7 @@ afterEach(() => {
   discoverMovies.mockReset()
   getMovieStatuses.mockReset()
   getUpcomingEvents.mockReset()
+  getTopFollowedPeople.mockReset()
   authUser = { uid: 'uid-1' }
 })
 
@@ -37,6 +42,7 @@ beforeEach(() => {
   discoverMovies.mockResolvedValue({ items: [], page: 1, totalPages: 1 })
   getMovieStatuses.mockResolvedValue({ items: {} })
   getUpcomingEvents.mockResolvedValue({ items: [] })
+  getTopFollowedPeople.mockResolvedValue({ items: [] })
 })
 
 // MovieSearch decides guest-vs-signed-in from useAuth() rather than a prop

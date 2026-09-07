@@ -43,3 +43,8 @@ export async function getPeopleSearch(req: Request, res: Response): Promise<void
   const result = await peopleService.searchPeopleService(req.query.q);
   Responder.success(res, result);
 }
+
+export async function getDiscoverPeople(_req: Request, res: Response): Promise<void> {
+  const result = await peopleService.getTopFollowedPeople();
+  Responder.success(res, result);
+}

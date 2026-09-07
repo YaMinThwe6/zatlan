@@ -34,6 +34,18 @@ export interface TasteMatch {
   matchReason: 'tasteMatch' | 'genreOverlap' | 'languageOverlap' | 'suggested'
 }
 
+// GET /discover/people item — the signed-out Discover page's "People you
+// might vibe with" teaser (movie/DiscoverPeopleTeaser.tsx). Public, so no
+// `relationship`/`score`/`matchReason` the way TasteMatch has — there's no
+// caller to compute those against yet. Deliberately real users (not
+// fabricated sample data), ranked by real followerCount.
+export interface TopFollowedPerson {
+  uid: string
+  displayName: string
+  photoURL: string | null
+  followerCount: number
+}
+
 // GET /movies/:movieId/watchedBy item — hld.md §5a. Scoped to the caller's
 // own `following` list, both list-level (users.listVisible) and per-entry
 // (watched.visibility) privacy checks applied server-side.

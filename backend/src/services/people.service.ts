@@ -1,4 +1,4 @@
-import type { TasteMatch, WatchedByEntry, PersonSummary } from "@binj/shared-types";
+import type { TasteMatch, WatchedByEntry, PersonSummary, TopFollowedPerson } from "@binj/shared-types";
 import { requireDb } from "../lib/firebaseAdmin.js";
 import { AppError } from "../utils/AppError.js";
 import { significantWords } from "../lib/searchIndex.js";
@@ -9,6 +9,8 @@ const RESULTS_TOP_N = 20;
 const MAX_ARRAY_CONTAINS_ANY = 10; // Firestore's cap, same convention as onboarding.service.ts
 export const COLD_START_MATCH_LIMIT = 10; // default page size for GET /users/me/tasteMatches, exported for the controller's ?limit= default
 const SUGGESTED_POOL_LIMIT = 30; // fan-out bound for the suggested-tier candidate pool, same convention as MAX_FOLLOWING_FOR_WATCHED_BY below
+const TOP_FOLLOWED_POOL_LIMIT = 30; // same fan-out-bound convention as SUGGESTED_POOL_LIMIT
+const TOP_FOLLOWED_LIMIT = 5; // GET /discover/people's response size — the signed-out teaser only ever shows a handful
 
 function toIso(value: FirebaseFirestore.Timestamp | Date | null): string | null {
   if (!value) return null;
@@ -124,6 +126,44 @@ async function getSuggestedMatches(db: FirebaseFirestore.Firestore, uid: string)
   );
 
   return items.sort((a, b) => b.score - a.score);
+}
+
+// GET /discover/people — the signed-out Discover page's "People you might
+// vibe with" teaser (movie/DiscoverPeopleTeaser.tsx). Public: no caller uid
+// to match against, so this can't reuse getTasteMatches' pipeline — instead
+// it's real users ranked by real followerCount, same "gate, don't fabricate"
+// choice PeopleYouMightVibeWith already makes for signed-in users. Anyone
+// with zero followers is excluded rather than shown with "0" — real social
+// proof or nothing, never a number that undercuts the point of showing this
+// at all. Bounded fan-out like getSuggestedMatches above; revisit with a
+// denormalized followerCount field before this needs to scale past that —
+// every anonymous visitor to Discover hits this, unlike the authenticated
+// endpoints elsewhere in this file.
+export async function getTopFollowedPeople(): Promise<{ items: TopFollowedPerson[] }> {
+  const db = requireDb();
+  const snap = await db.collection("users").orderBy("createdAt", "desc").get();
+  const pool = snap.docs.slice(0, TOP_FOLLOWED_POOL_LIMIT);
+  if (pool.length === 0) return { items: [] };
+
+  const items = await Promise.all(
+    pool.map(async (d): Promise<TopFollowedPerson> => {
+      const followersSnap = await db.collection("users").doc(d.id).collection("followers").get();
+      const data = d.data();
+      return {
+        uid: d.id,
+        displayName: (data.displayName as string) ?? "Unknown",
+        photoURL: (data.photoURL as string | null) ?? null,
+        followerCount: followersSnap.docs.length
+      };
+    })
+  );
+
+  return {
+    items: items
+      .filter((p) => p.followerCount > 0)
+      .sort((a, b) => b.followerCount - a.followerCount)
+      .slice(0, TOP_FOLLOWED_LIMIT)
+  };
 }
 
 // GET /users/me/tasteMatches — api-contracts.md §5, hld.md §5b.
