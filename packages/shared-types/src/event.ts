@@ -47,6 +47,16 @@ export interface NearbyEvent extends UpcomingEvent {
   distanceKm: number
 }
 
+// GET /events/:eventId — same fields as UpcomingEvent, plus the host's name
+// for the detail page's "Hosted by" line (list endpoints don't join this in —
+// it'd be an extra per-item lookup they don't need), and the caller's own
+// relationship to the event so the Join/Requested/Chat button renders
+// correctly on first load, not just after clicking something.
+export interface EventDetail extends UpcomingEvent {
+  hostDisplayName: string
+  viewerStatus: 'host' | 'joined' | 'pending' | 'none'
+}
+
 // POST /events request body — hld.md §7 "Create Event", api-contracts.md §8.
 // `location` is required only for mode: 'in-person' (events.service.ts's
 // createEvent rejects an in-person event without one); ignored for 'online'.

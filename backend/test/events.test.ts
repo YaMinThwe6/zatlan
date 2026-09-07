@@ -683,6 +683,39 @@ describe("GET /events/:eventId", () => {
     const res = await authed(app, "get", "/events/evt-1");
     expect(res.body.data.preciseLocation).toEqual({ lat: 12.9716, lng: 77.5946 });
   });
+
+  it("reports viewerStatus: 'host' for the event's own host", async () => {
+    store.set("events/evt-1", { hostId: "host-1", movieId: "movie-1", visibility: "public", participantCount: 1, participantLimit: 5, requiresApproval: false });
+    const app = createApp(); // currentUid stays "host-1"
+    const res = await authed(app, "get", "/events/evt-1");
+    expect(res.body.data.viewerStatus).toBe("host");
+  });
+
+  it("reports viewerStatus: 'joined' for a participant who isn't the host", async () => {
+    store.set("events/evt-1", { hostId: "host-1", movieId: "movie-1", visibility: "public", participantCount: 2, participantLimit: 5, requiresApproval: false });
+    store.set("events/evt-1/participants/guest-1", { joinedAt: new Date() });
+    currentUid = "guest-1";
+    const app = createApp();
+    const res = await authed(app, "get", "/events/evt-1");
+    expect(res.body.data.viewerStatus).toBe("joined");
+  });
+
+  it("reports viewerStatus: 'pending' for someone with an outstanding join request", async () => {
+    store.set("events/evt-1", { hostId: "host-1", movieId: "movie-1", visibility: "public", participantCount: 1, participantLimit: 5, requiresApproval: true });
+    store.set("events/evt-1/joinRequests/guest-1", { createdAt: new Date() });
+    currentUid = "guest-1";
+    const app = createApp();
+    const res = await authed(app, "get", "/events/evt-1");
+    expect(res.body.data.viewerStatus).toBe("pending");
+  });
+
+  it("reports viewerStatus: 'none' for a stranger who hasn't joined or requested", async () => {
+    store.set("events/evt-1", { hostId: "host-1", movieId: "movie-1", visibility: "public", participantCount: 1, participantLimit: 5, requiresApproval: false });
+    currentUid = "stranger-1";
+    const app = createApp();
+    const res = await authed(app, "get", "/events/evt-1");
+    expect(res.body.data.viewerStatus).toBe("none");
+  });
 });
 
 describe("DELETE /events/:eventId", () => {

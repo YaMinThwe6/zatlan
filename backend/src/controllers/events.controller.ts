@@ -17,6 +17,11 @@ export async function getNearbyEvents(req: Request, res: Response): Promise<void
   Responder.success(res, result);
 }
 
+export async function getHostedEvents(req: Request, res: Response): Promise<void> {
+  const result = await eventsService.listHostedEvents(req.uid!);
+  Responder.success(res, result);
+}
+
 export async function putJoinEvent(req: Request, res: Response): Promise<void> {
   const result = await eventsService.joinEvent(req.uid!, req.params.eventId);
   Responder.success(res, result);

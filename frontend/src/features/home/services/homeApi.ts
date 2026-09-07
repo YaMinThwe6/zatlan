@@ -1,6 +1,6 @@
 import { apiFetch } from '../../../lib/api'
-export type { RecommendationItem, TasteMatch, UpcomingEvent, ActivityItem, Greeting, NotificationItem, NearbyEvent, FriendsRecommendationItem, CreateEventInput, EventSummary } from '@binj/shared-types'
-import type { RecommendationItem, TasteMatch, UpcomingEvent, ActivityItem, Greeting, NotificationItem, NearbyEvent, FriendsRecommendationItem, CreateEventInput, EventSummary } from '@binj/shared-types'
+export type { RecommendationItem, TasteMatch, UpcomingEvent, ActivityItem, Greeting, NotificationItem, NearbyEvent, FriendsRecommendationItem, CreateEventInput, EventSummary, EventDetail } from '@binj/shared-types'
+import type { RecommendationItem, TasteMatch, UpcomingEvent, ActivityItem, Greeting, NotificationItem, NearbyEvent, FriendsRecommendationItem, CreateEventInput, EventSummary, EventDetail } from '@binj/shared-types'
 
 export function getHomeGreeting(): Promise<Greeting> {
   return apiFetch('/home/greeting', { auth: true })
@@ -53,6 +53,20 @@ export function joinEvent(eventId: string): Promise<{ status: 'joined' | 'pendin
 
 export function leaveEvent(eventId: string): Promise<void> {
   return apiFetch(`/events/${encodeURIComponent(eventId)}/join`, { method: 'DELETE', auth: true })
+}
+
+// Events page's "Hosting" tab — every event the caller hosts, public or
+// private, unlike getUpcomingEvents which only ever returns public ones.
+export function getHostedEvents(): Promise<{ items: UpcomingEvent[] }> {
+  return apiFetch('/events/hosting', { auth: true })
+}
+
+export function getEvent(eventId: string): Promise<EventDetail> {
+  return apiFetch(`/events/${encodeURIComponent(eventId)}`, { auth: true })
+}
+
+export function deleteEvent(eventId: string): Promise<void> {
+  return apiFetch(`/events/${encodeURIComponent(eventId)}`, { method: 'DELETE', auth: true })
 }
 
 export function getNotifications(unreadOnly = false): Promise<{ items: NotificationItem[] }> {
