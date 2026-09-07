@@ -5,6 +5,7 @@ import {
   postEvent,
   getUpcomingEvents,
   getNearbyEvents,
+  getHostedEvents,
   putJoinEvent,
   deleteJoinEvent,
   getJoinRequests,
@@ -21,6 +22,10 @@ eventsRouter.post("/events", requireAuth, asyncHandler(postEvent));
 // precise location either way, see events.service.ts's listUpcomingEvents).
 eventsRouter.get("/events/upcoming", asyncHandler(getUpcomingEvents));
 eventsRouter.get("/events/nearby", requireAuth, asyncHandler(getNearbyEvents));
+// Kept above the ":eventId" routes below for the same shadowing reason as
+// "upcoming"/"nearby" — a literal path segment has to be registered before
+// any param route that would otherwise swallow it as :eventId.
+eventsRouter.get("/events/hosting", requireAuth, asyncHandler(getHostedEvents));
 eventsRouter.put("/events/:eventId/join", requireAuth, asyncHandler(putJoinEvent));
 eventsRouter.delete("/events/:eventId/join", requireAuth, asyncHandler(deleteJoinEvent));
 eventsRouter.get("/events/:eventId/joinRequests", requireAuth, asyncHandler(getJoinRequests));

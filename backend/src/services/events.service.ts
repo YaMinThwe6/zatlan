@@ -1,6 +1,5 @@
 import { randomBytes } from "node:crypto";
-import type { EventSummary, UpcomingEvent, NearbyEvent } from "@binj/shared-types";
-type EventDetail = UpcomingEvent;
+import type { EventSummary, UpcomingEvent, NearbyEvent, EventDetail } from "@binj/shared-types";
 import { requireDb } from "../lib/firebaseAdmin.js";
 import { writeNotification } from "../lib/notify.js";
 import { AppError } from "../utils/AppError.js";
@@ -467,18 +466,71 @@ export async function getEvent(eventId: string, callerUid: string): Promise<Even
     throw new AppError("EVENT_NOT_FOUND", "No such event", 404);
   }
   const data = eventSnap.data()!;
-  const movieSnap = await db.collection("movies").doc(data.movieId).get();
+  const [movieSnap, hostSnap] = await Promise.all([
+    db.collection("movies").doc(data.movieId).get(),
+    db.collection("users").doc(data.hostId).get()
+  ]);
   // The exact meeting spot is only for the host or someone who's actually
   // joined — a signed-in caller who's merely looking at a public event's
   // detail page doesn't get more than the area/city everyone else sees.
   const isHost = data.hostId === callerUid;
   const participantSnap = isHost ? null : await db.collection("events").doc(eventId).collection("participants").doc(callerUid).get();
-  const canSeePrecise = isHost || (participantSnap?.exists ?? false);
+  const isParticipant = isHost || (participantSnap?.exists ?? false);
+  const canSeePrecise = isParticipant;
+
+  // The frontend's Join/Requested/Chat button needs to know the viewer's own
+  // relationship to this event on first render, not just after they click
+  // something — a join-requests read only when it's actually relevant (not
+  // host, not already a participant), same "only pay for what you need"
+  // shape as canSeePrecise above.
+  const requestSnap = !isParticipant ? await db.collection("events").doc(eventId).collection("joinRequests").doc(callerUid).get() : null;
+  const viewerStatus: "host" | "joined" | "pending" | "none" = isHost
+    ? "host"
+    : isParticipant
+      ? "joined"
+      : requestSnap?.exists
+        ? "pending"
+        : "none";
+
   return {
     ...toEventSummary(eventSnap.id, data, canSeePrecise),
     movieTitle: movieSnap.data()?.title ?? null,
-    moviePoster: movieSnap.data()?.poster ?? null
+    moviePoster: movieSnap.data()?.poster ?? null,
+    hostDisplayName: hostSnap.data()?.displayName ?? "Unknown",
+    viewerStatus
   };
+}
+
+// GET /events/hosting — the Events page's "Hosting" tab. Unlike /events/upcoming
+// (public only, so a host managing a private watch party has nowhere to see
+// it listed), this is scoped to the caller's own hostId regardless of
+// visibility — deliberately the one events list that isn't gated by the
+// privacy-by-not-being-listed rule the rest of this file follows, since the
+// host themself already has full visibility into their own event.
+export async function listHostedEvents(uid: string): Promise<{ items: UpcomingEvent[] }> {
+  const db = requireDb();
+  const snap = await db
+    .collection("events")
+    .where("hostId", "==", uid)
+    .where("datetime", ">=", new Date())
+    .orderBy("datetime", "asc")
+    .get();
+
+  const items: UpcomingEvent[] = await Promise.all(
+    snap.docs
+      .filter((d) => d.data().deleted !== true)
+      .map(async (d) => {
+        const data = d.data();
+        const movieSnap = await db.collection("movies").doc(data.movieId).get();
+        return {
+          ...toEventSummary(d.id, data, true), // the host always sees their own event's exact location
+          movieTitle: movieSnap.data()?.title ?? null,
+          moviePoster: movieSnap.data()?.poster ?? null
+        };
+      })
+  );
+
+  return { items };
 }
 
 // DELETE /events/:eventId — hld.md §21's general edit/delete pattern: author
