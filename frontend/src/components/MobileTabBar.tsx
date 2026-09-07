@@ -2,12 +2,12 @@ import { useNavigate } from 'react-router-dom'
 
 // Mobile/tablet bottom nav (below lg — the Sidebar owns nav from lg up).
 // Shared by the signed-in top-level pages so switching between them keeps the
-// same nav surface; `active` marks the current tab. People/Inbox still mirror
-// the Sidebar's "Coming soon" disabled treatment. 'profile' isn't one of this
+// same nav surface; `active` marks the current tab. Inbox still mirrors the
+// Sidebar's "Coming soon" disabled treatment. 'profile' isn't one of this
 // bar's own tabs (Profile has no Home/Search-style icon here, same as
 // Sidebar's own nav doesn't duplicate itself) — passing it just means neither
 // Home nor Search should show as active, both render as ordinary buttons.
-export function MobileTabBar({ active }: { active: 'home' | 'search' | 'events' | 'profile' }) {
+export function MobileTabBar({ active }: { active: 'home' | 'search' | 'events' | 'people' | 'profile' }) {
   const navigate = useNavigate()
 
   const tab = (on: boolean) =>
@@ -39,9 +39,13 @@ export function MobileTabBar({ active }: { active: 'home' | 'search' | 'events' 
             Events
           </button>
         )}
-        <span className="flex flex-col items-center gap-1 text-[10px] font-semibold text-text-faint" title="Coming soon">
-          People
-        </span>
+        {active === 'people' ? (
+          <span className={tab(true)}>People</span>
+        ) : (
+          <button type="button" onClick={() => navigate('/people')} className={tab(false)}>
+            People
+          </button>
+        )}
         <span className="flex flex-col items-center gap-1 text-[10px] font-semibold text-text-faint" title="Coming soon">
           Inbox
         </span>

@@ -20,11 +20,18 @@ export interface PersonSummary {
 // GET /users/me/tasteMatches item — relationship is joined live against the
 // Follow collections (api-contracts.md §4) so a "Connect" button can render
 // the right state without a second round-trip.
+//
+// matchReason records which tier of the ranking pipeline surfaced this
+// candidate (precomputed watch-history overlap, live genre/language overlap,
+// or the guaranteed catch-all) — lets the UI say *why* someone is suggested
+// for free, no extra query.
 export interface TasteMatch {
   uid: string
   displayName: string
+  photoURL: string | null
   score: number
   relationship: 'following' | 'pending' | 'none'
+  matchReason: 'tasteMatch' | 'genreOverlap' | 'languageOverlap' | 'suggested'
 }
 
 // GET /movies/:movieId/watchedBy item — hld.md §5a. Scoped to the caller's
