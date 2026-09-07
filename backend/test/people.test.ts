@@ -115,12 +115,12 @@ describe("GET /users/me/tasteMatches", () => {
 
     expect(res.status).toBe(200);
     expect(res.body.data.items).toEqual([
-      { uid: "uid-3", displayName: "Meera", score: 91, relationship: "pending" },
-      { uid: "uid-2", displayName: "Rohan", score: 84, relationship: "following" }
+      { uid: "uid-3", displayName: "Meera", photoURL: null, score: 91, relationship: "pending", matchReason: "tasteMatch" },
+      { uid: "uid-2", displayName: "Rohan", photoURL: null, score: 84, relationship: "following", matchReason: "tasteMatch" }
     ]);
   });
 
-  it("returns an empty list when there are no matches yet and the caller picked no favorite genres", async () => {
+  it("returns an empty list when there are no matches yet, no other users exist at all, and the caller picked no favorite genres", async () => {
     const app = createApp();
     const res = await request(app).get("/users/me/tasteMatches").set("Authorization", "Bearer good");
     expect(res.status).toBe(200);
@@ -134,12 +134,15 @@ describe("GET /users/me/tasteMatches", () => {
     store.set("users/uid-4", { displayName: "NoOverlap", favoriteGenres: ["Romance"] }); // shares nothing — TMDB's own array-contains-any excludes this from the query entirely
 
     const app = createApp();
-    const res = await request(app).get("/users/me/tasteMatches").set("Authorization", "Bearer good");
+    // Limit=2 keeps this test scoped to the genre-overlap tier itself — with
+    // the default limit the guaranteed suggested-tier catch-all (tested
+    // below) would also top up the remaining slots with uid-4.
+    const res = await request(app).get("/users/me/tasteMatches?limit=2").set("Authorization", "Bearer good");
 
     expect(res.status).toBe(200);
     expect(res.body.data.items).toEqual([
-      { uid: "uid-3", displayName: "Meera", score: 100, relationship: "none" },
-      { uid: "uid-2", displayName: "Rohan", score: 50, relationship: "none" }
+      { uid: "uid-3", displayName: "Meera", photoURL: null, score: 100, relationship: "none", matchReason: "genreOverlap" },
+      { uid: "uid-2", displayName: "Rohan", photoURL: null, score: 50, relationship: "none", matchReason: "genreOverlap" }
     ]);
   });
 
@@ -150,6 +153,95 @@ describe("GET /users/me/tasteMatches", () => {
     const res = await request(app).get("/users/me/tasteMatches").set("Authorization", "Bearer good");
 
     expect(res.body.data.items).toEqual([]);
+  });
+
+  it("falls back to a live language-overlap match when genre-overlap and precomputed matches are both empty", async () => {
+    store.set("users/uid-1", { displayName: "Me", preferredLanguages: ["hi", "en"] });
+    store.set("users/uid-2", { displayName: "Priya", preferredLanguages: ["hi"] }); // 1/2 shared = 50%
+    store.set("users/uid-3", { displayName: "Dev", preferredLanguages: ["hi", "en"] }); // 2/2 shared = 100%
+    store.set("users/uid-4", { displayName: "NoOverlap", preferredLanguages: ["fr"] }); // excluded by array-contains-any
+
+    const app = createApp();
+    const res = await request(app).get("/users/me/tasteMatches?limit=2").set("Authorization", "Bearer good");
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.items).toEqual([
+      { uid: "uid-3", displayName: "Dev", photoURL: null, score: 100, relationship: "none", matchReason: "languageOverlap" },
+      { uid: "uid-2", displayName: "Priya", photoURL: null, score: 50, relationship: "none", matchReason: "languageOverlap" }
+    ]);
+  });
+
+  it("a candidate qualifying for more than one tier is only returned once, tagged with the higher-priority tier", async () => {
+    store.set("users/uid-1", { displayName: "Me", favoriteGenres: ["Drama"], preferredLanguages: ["hi"] });
+    // uid-2 overlaps on both genre and language, and (via createdAt/followers)
+    // would also qualify for the suggested catch-all — genre-overlap should win.
+    store.set("users/uid-2", { displayName: "Sam", favoriteGenres: ["Drama"], preferredLanguages: ["hi"], createdAt: 1000 });
+    store.set("users/uid-2/followers/x1", { createdAt: 1 });
+
+    const app = createApp();
+    const res = await request(app).get("/users/me/tasteMatches").set("Authorization", "Bearer good");
+
+    expect(res.body.data.items).toEqual([{ uid: "uid-2", displayName: "Sam", photoURL: null, score: 100, relationship: "none", matchReason: "genreOverlap" }]);
+  });
+
+  it("falls all the way through to the suggested tier (recency + follower blend) when the caller has no genre, language, or precomputed signal at all", async () => {
+    store.set("users/uid-2", { displayName: "Low", createdAt: 1000 }); // oldest, no followers
+    store.set("users/uid-3", { displayName: "Top", createdAt: 3000 }); // newest + most followers — wins both dimensions
+    store.set("users/uid-3/followers/f1", {});
+    store.set("users/uid-3/followers/f2", {});
+    store.set("users/uid-3/followers/f3", {});
+    store.set("users/uid-4", { displayName: "Mid", createdAt: 2000 }); // no followers, middling recency
+
+    const app = createApp();
+    const res = await request(app).get("/users/me/tasteMatches").set("Authorization", "Bearer good");
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.items).toEqual([
+      { uid: "uid-3", displayName: "Top", photoURL: null, score: 100, relationship: "none", matchReason: "suggested" },
+      { uid: "uid-4", displayName: "Mid", photoURL: null, score: 25, relationship: "none", matchReason: "suggested" },
+      { uid: "uid-2", displayName: "Low", photoURL: null, score: 0, relationship: "none", matchReason: "suggested" }
+    ]);
+  });
+
+  it("excludes a caller's blocked users from the suggested tier", async () => {
+    store.set("users/uid-2", { displayName: "Blocked", createdAt: 2000 });
+    store.set("users/uid-3", { displayName: "Visible", createdAt: 1000 });
+    store.set("users/uid-1/blocked/uid-2", { createdAt: new Date() });
+
+    const app = createApp();
+    const res = await request(app).get("/users/me/tasteMatches").set("Authorization", "Bearer good");
+
+    expect(res.body.data.items).toEqual([{ uid: "uid-3", displayName: "Visible", photoURL: null, score: 50, relationship: "none", matchReason: "suggested" }]);
+  });
+
+  it("tops up a sparse precomputed list with the suggested tier instead of returning it as-is", async () => {
+    store.set("users/uid-2", { displayName: "Precomputed Friend" });
+    store.set("users/uid-1/tasteMatches/uid-2", { score: 80, computedAt: new Date() });
+    store.set("users/uid-3", { displayName: "Nadia", createdAt: 2000 });
+    store.set("users/uid-3/followers/f1", {});
+    store.set("users/uid-4", { displayName: "Omar", createdAt: 1000 });
+
+    const app = createApp();
+    const res = await request(app).get("/users/me/tasteMatches").set("Authorization", "Bearer good");
+
+    expect(res.body.data.items).toEqual([
+      { uid: "uid-2", displayName: "Precomputed Friend", photoURL: null, score: 80, relationship: "none", matchReason: "tasteMatch" },
+      { uid: "uid-3", displayName: "Nadia", photoURL: null, score: 100, relationship: "none", matchReason: "suggested" },
+      { uid: "uid-4", displayName: "Omar", photoURL: null, score: 25, relationship: "none", matchReason: "suggested" }
+    ]);
+  });
+
+  it("?limit= clamps how many results come back, respecting each tier's own score ordering", async () => {
+    store.set("users/uid-1", { displayName: "Me", favoriteGenres: ["Drama"] });
+    store.set("users/uid-2", { displayName: "A", favoriteGenres: ["Drama"] });
+    store.set("users/uid-3", { displayName: "B", favoriteGenres: ["Drama"] });
+    store.set("users/uid-4", { displayName: "C", favoriteGenres: ["Drama"] });
+
+    const app = createApp();
+    const res = await request(app).get("/users/me/tasteMatches?limit=2").set("Authorization", "Bearer good");
+
+    expect(res.body.data.items).toHaveLength(2);
+    expect(res.body.data.items.every((i: { matchReason: string }) => i.matchReason === "genreOverlap")).toBe(true);
   });
 });
 

@@ -9,6 +9,7 @@ import { Home } from './features/home/components/Home'
 import { MovieSearch } from './features/movie/components/MovieSearch'
 import { MovieDetail } from './features/movie/components/MovieDetail'
 import { Profile } from './features/profile/components/Profile'
+import { PeopleDiscovery } from './features/people/components/PeopleDiscovery'
 import { Settings } from './features/settings/components/Settings'
 import { RoomChat } from './features/chat/components/RoomChat'
 import { About } from './features/about/components/About'
@@ -94,6 +95,7 @@ function App() {
       <Route path="/" element={<Home me={me} onSignOut={() => void signOutUser()} />} />
       <Route path="/search" element={<MovieSearch />} />
       <Route path="/movie/:movieId" element={<MovieDetail />} />
+      <Route path="/people" element={<PeopleDiscovery />} />
       <Route path="/profile/:uid" element={<Profile />} />
       <Route path="/settings" element={<Settings me={me} onUpdateMe={setMe} />} />
       <Route path="/rooms/:roomId" element={<RoomChat />} />

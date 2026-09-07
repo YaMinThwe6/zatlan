@@ -45,7 +45,7 @@ function NavRow({ label, active, disabled, icon, onClick }: NavItem) {
 // separate screens; `active` highlights the current one. Only Home/Search/
 // Profile are wired to real navigation; the rest mirror the same
 // "Coming soon" disabled treatment the mobile bottom nav already uses.
-export function Sidebar({ active = 'home' }: { active?: 'home' | 'search' | 'profile' | 'settings' }) {
+export function Sidebar({ active = 'home' }: { active?: 'home' | 'search' | 'people' | 'profile' | 'settings' }) {
   const navigate = useNavigate()
   // Self-sufficient fetch, same pattern as AppHeader's own `getMe()` call —
   // the Profile nav row below needs the caller's own uid to link to
@@ -108,7 +108,8 @@ export function Sidebar({ active = 'home' }: { active?: 'home' | 'search' | 'pro
         />
         <NavRow
           label="People"
-          disabled
+          active={active === 'people'}
+          onClick={() => navigate('/people')}
           icon={
             <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
               <path d="M17 21v-2a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v2" />

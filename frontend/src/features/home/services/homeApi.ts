@@ -18,8 +18,8 @@ export function getRecommendations(): Promise<{ items: RecommendationItem[] }> {
   return apiFetch('/recommendations', { auth: true })
 }
 
-export function getTasteMatches(): Promise<{ items: TasteMatch[] }> {
-  return apiFetch('/users/me/tasteMatches', { auth: true })
+export function getTasteMatches(limit?: number): Promise<{ items: TasteMatch[] }> {
+  return apiFetch(`/users/me/tasteMatches${limit ? `?limit=${limit}` : ''}`, { auth: true })
 }
 
 export function followUser(uid: string): Promise<{ status: 'following' | 'pending' }> {
