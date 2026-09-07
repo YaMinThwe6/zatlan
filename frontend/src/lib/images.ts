@@ -14,3 +14,12 @@ export type PosterSize = 'w92' | 'w185' | 'w342' | 'w500'
 export function posterUrl(path: string | null, size: PosterSize = 'w342'): string | null {
   return path ? `${TMDB_IMAGE_BASE}/${size}${path}` : null
 }
+
+// TMDB's separate widescreen bucket for backdrop_path (movie detail's hero
+// image) — different size ladder than posters', since a backdrop is much
+// wider than tall.
+export type BackdropSize = 'w300' | 'w780' | 'w1280'
+
+export function backdropUrl(path: string | null, size: BackdropSize = 'w1280'): string | null {
+  return path ? `${TMDB_IMAGE_BASE}/${size}${path}` : null
+}

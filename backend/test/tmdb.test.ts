@@ -156,4 +156,36 @@ describe("tmdb.fetchMovieDetails", () => {
 
     expect(movie.releaseDate).toBeNull();
   });
+
+  it("captures backdrop from TMDB's raw backdrop_path — the movie detail hero's large widescreen image, distinct from the portrait poster", async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        id: 27205,
+        title: "Inception",
+        backdrop_path: "/wide-image.jpg",
+        genres: [],
+        credits: { cast: [], crew: [] }
+      })
+    }) as unknown as typeof fetch;
+
+    const { fetchMovieDetails } = await import("../src/lib/tmdb.js");
+    const movie = await fetchMovieDetails("27205");
+
+    expect(movie.backdrop).toBe("/wide-image.jpg");
+  });
+
+  it("defaults backdrop to null when TMDB omits it", async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ id: 1, title: "Untitled", genres: [], credits: { cast: [], crew: [] } })
+    }) as unknown as typeof fetch;
+
+    const { fetchMovieDetails } = await import("../src/lib/tmdb.js");
+    const movie = await fetchMovieDetails("1");
+
+    expect(movie.backdrop).toBeNull();
+  });
 });

@@ -50,6 +50,12 @@ export interface MovieDetail extends MovieSummary {
   voteAverage: number
   voteCount: number
   trailerKey: string | null
+  // Widescreen key art, distinct from `poster` (portrait) — TMDB's own
+  // backdrop_path. Movie detail's hero uses this for the large image
+  // alongside the trailer-embed slot; not returned by the leaner list
+  // shapes above (MovieSummary/RecommendationItem/etc.) since they only
+  // ever render the small poster.
+  backdrop: string | null
   streamingProviders: StreamingProvider[]
   // BINJ's own aggregate rating (hld.md §20) and like count — always present in
   // the response, defaulting to zero when absent from storage (a movie that's

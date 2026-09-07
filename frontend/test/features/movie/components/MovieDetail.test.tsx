@@ -189,6 +189,24 @@ describe('MovieDetail', () => {
     await waitFor(() => expect(document.querySelector('img.poster')).toHaveAttribute('src', 'https://image.tmdb.org/t/p/w500/dune2.jpg'))
   })
 
+  it('shows a Play trailer button in the hero when the movie has a trailer', async () => {
+    getMovie.mockResolvedValueOnce({ ...movie, trailerKey: 'abc123' })
+    getMovieStatus.mockResolvedValue(emptyStatus)
+    getMovieReviews.mockResolvedValue({ items: [], nextCursor: null })
+    renderWithRouter()
+
+    expect(await screen.findByRole('button', { name: /play trailer/i })).toBeInTheDocument()
+  })
+
+  it('renders the widescreen backdrop image alongside the poster when the movie has one', async () => {
+    getMovie.mockResolvedValueOnce({ ...movie, backdrop: '/wide.jpg' })
+    getMovieStatus.mockResolvedValue(emptyStatus)
+    getMovieReviews.mockResolvedValue({ items: [], nextCursor: null })
+    renderWithRouter()
+
+    await waitFor(() => expect(document.querySelector('img[src*="w1280/wide.jpg"]')).toBeInTheDocument())
+  })
+
   it('renders no poster image when the movie has none', async () => {
     mockDefaults() // fixture's poster is null
     renderWithRouter()

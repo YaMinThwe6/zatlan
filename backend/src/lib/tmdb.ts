@@ -28,6 +28,7 @@ export interface TmdbMovie {
   voteCount: number;
   releaseDate: string | null; // TMDB's raw ISO date — movies.service.ts stores this so onboarding's local candidate query can exclude not-yet-released movies
   trailerKey: string | null; // YouTube video id, e.g. https://www.youtube.com/watch?v={trailerKey}
+  backdrop: string | null; // TMDB's raw backdrop_path — widescreen key art for the movie detail hero, distinct from the portrait poster
   streamingProviders: { name: string; type: "subscription" | "rent" | "buy"; logo: string }[];
   credits: TmdbPersonCredit[]; // full person-doc-shape data for everyone in cast/crew above, for upserting people/{personId} (schema.md)
 }
@@ -118,6 +119,7 @@ export async function fetchMovieDetails(tmdbId: string): Promise<TmdbMovie> {
     voteCount: data.vote_count ?? 0,
     releaseDate: data.release_date || null,
     trailerKey: pickTrailer(data.videos),
+    backdrop: data.backdrop_path || null,
     streamingProviders: mapProviders(data["watch/providers"]),
     credits: [...creditsById.values()]
   };
