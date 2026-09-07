@@ -4,15 +4,9 @@ import { getNearbyEvents, joinEvent, type NearbyEvent } from '../services/homeAp
 import { NearbyEventsMap } from './NearbyEventsMap'
 import { mapsConfigured } from '../../../lib/maps'
 import { posterUrl } from '../../../lib/images'
+import { formatEventDate as formatDate } from '../../../lib/eventDate'
 
 const DEFAULT_RADIUS_KM = 25
-
-function formatDate(iso: string | null): string {
-  if (!iso) return ''
-  const d = new Date(iso)
-  return d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' }) +
-    ' · ' + d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
-}
 
 type Status = 'idle' | 'locating' | 'loading' | 'loaded' | 'denied' | 'error'
 

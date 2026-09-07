@@ -1,15 +1,10 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { getUpcomingEvents, joinEvent, createEvent, type UpcomingEvent } from '../../home/services/homeApi'
+import { formatEventDate as formatDate } from '../../../lib/eventDate'
 
 interface Props {
   movieId: string
-}
-
-function formatDate(iso: string | null): string {
-  if (!iso) return ''
-  const d = new Date(iso)
-  return d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' }) + ' · ' + d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
 }
 
 type LocationState = { status: 'idle' | 'locating' | 'captured' | 'error'; area: string; city: string; lat: number | null; lng: number | null }

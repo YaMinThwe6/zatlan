@@ -4,16 +4,10 @@ import { getUpcomingEvents, getHostedEvents, joinEvent, type UpcomingEvent } fro
 import { Sidebar } from '../../../components/Sidebar'
 import { MobileTabBar } from '../../../components/MobileTabBar'
 import { posterUrl } from '../../../lib/images'
+import { formatEventDate as formatDate } from '../../../lib/eventDate'
 import { CreateEventModal } from './CreateEventModal'
 
 type Tab = 'upcoming' | 'hosting'
-
-function formatDate(iso: string | null): string {
-  if (!iso) return ''
-  const d = new Date(iso)
-  return d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' }) +
-    ' · ' + d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
-}
 
 // The Events page's own list of "which of my hosted events has this browser
 // already asked to join" is intentionally local-only, same as Home's

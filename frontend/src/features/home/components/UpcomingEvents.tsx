@@ -2,13 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { getUpcomingEvents, joinEvent, type UpcomingEvent } from '../services/homeApi'
 import { posterUrl } from '../../../lib/images'
-
-function formatDate(iso: string | null): string {
-  if (!iso) return ''
-  const d = new Date(iso)
-  return d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' }) +
-    ' · ' + d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
-}
+import { formatEventDate as formatDate } from '../../../lib/eventDate'
 
 export function UpcomingEvents() {
   const navigate = useNavigate()

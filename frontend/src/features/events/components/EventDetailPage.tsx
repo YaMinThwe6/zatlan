@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import type { Me } from '../../../lib/api'
 import { getEvent, joinEvent, leaveEvent, deleteEvent, type EventDetail } from '../../home/services/homeApi'
 import { posterUrl } from '../../../lib/images'
+import { formatEventDate } from '../../../lib/eventDate'
 import { Sidebar } from '../../../components/Sidebar'
 import { MobileTabBar } from '../../../components/MobileTabBar'
 
@@ -11,10 +12,7 @@ interface Props {
 }
 
 function formatDate(iso: string | null): string {
-  if (!iso) return ''
-  const d = new Date(iso)
-  return d.toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' }) +
-    ' · ' + d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
+  return formatEventDate(iso, { weekday: 'long' })
 }
 
 export function EventDetailPage({ me }: Props) {
