@@ -66,20 +66,23 @@ function tasteMatchLabel(score: number): string {
 }
 
 function ActivityLine({ item }: { item: PublicProfile['recentActivity'][number] }) {
+  const navigate = useNavigate()
   const title = item.movieTitle ?? 'a movie'
   return (
-    <li className="flex items-center gap-3">
-      <div className="h-10 w-10 flex-none overflow-hidden rounded-lg bg-surface-alt">
-        {item.moviePoster && <img src={posterUrl(item.moviePoster, 'w92') ?? undefined} alt="" className="h-full w-full object-cover" />}
-      </div>
-      <div className="min-w-0 flex-1">
-        <p className="truncate text-[12.5px] text-text">
-          {item.type === 'watched' ? 'Watched ' : 'Added '}
-          <span className="font-bold">{title}</span>
-          {item.type === 'watchlist_added' && ' to watchlist'}
-        </p>
-        <p className="mt-0.5 text-[11px] text-text-muted">{formatRelativeTime(item.createdAt)}</p>
-      </div>
+    <li>
+      <button type="button" onClick={() => navigate(`/movie/${item.movieId}`)} className="flex w-full items-center gap-3 text-left">
+        <div className="h-10 w-10 flex-none overflow-hidden rounded-lg bg-surface-alt">
+          {item.moviePoster && <img src={posterUrl(item.moviePoster, 'w92') ?? undefined} alt="" className="h-full w-full object-cover" />}
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-[12.5px] text-text">
+            {item.type === 'watched' ? 'Watched ' : 'Added '}
+            <span className="font-bold">{title}</span>
+            {item.type === 'watchlist_added' && ' to watchlist'}
+          </p>
+          <p className="mt-0.5 text-[11px] text-text-muted">{formatRelativeTime(item.createdAt)}</p>
+        </div>
+      </button>
     </li>
   )
 }
@@ -377,14 +380,16 @@ export function Profile() {
             {profile.watched.map((entry) => {
               const poster = posterUrl(entry.poster, 'w185')
               return (
-                <li key={entry.movieId} className="flex items-center gap-3 lg:block">
-                  <div className="h-12 w-9 flex-none overflow-hidden rounded-md bg-surface-alt lg:h-auto lg:w-full lg:aspect-[2/3] lg:rounded-xl">
-                    {poster && <img src={poster} alt="" className="h-full w-full object-cover" />}
-                  </div>
-                  <div className="min-w-0 flex-1 lg:mt-2">
-                    <span className="block truncate text-[13px] font-medium text-text lg:text-[12px]">{entry.title ?? 'Untitled'}</span>
-                    <span className="text-[11px] text-text-muted">{formatWatchedAt(entry.watchedAt)}</span>
-                  </div>
+                <li key={entry.movieId}>
+                  <button type="button" onClick={() => navigate(`/movie/${entry.movieId}`)} className="flex w-full items-center gap-3 text-left lg:block">
+                    <div className="h-12 w-9 flex-none overflow-hidden rounded-md bg-surface-alt lg:h-auto lg:w-full lg:aspect-[2/3] lg:rounded-xl">
+                      {poster && <img src={poster} alt="" className="h-full w-full object-cover" />}
+                    </div>
+                    <div className="min-w-0 flex-1 lg:mt-2">
+                      <span className="block truncate text-[13px] font-medium text-text lg:text-[12px]">{entry.title ?? 'Untitled'}</span>
+                      <span className="text-[11px] text-text-muted">{formatWatchedAt(entry.watchedAt)}</span>
+                    </div>
+                  </button>
                 </li>
               )
             })}

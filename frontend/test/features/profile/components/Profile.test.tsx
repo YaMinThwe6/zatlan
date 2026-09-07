@@ -67,6 +67,7 @@ function renderWithRouter(uid = 'u1') {
       <Routes>
         <Route path="/" element={<p>Previous page</p>} />
         <Route path="/profile/:uid" element={<Profile />} />
+        <Route path="/movie/:movieId" element={<p>Movie detail page</p>} />
       </Routes>
     </MemoryRouter>
   )
@@ -81,6 +82,26 @@ describe('Profile', () => {
     expect(screen.getByText('rohan.movies', { exact: false })).toBeInTheDocument()
     expect(screen.getByText('12')).toBeInTheDocument()
     expect(screen.getByText('8')).toBeInTheDocument()
+  })
+
+  it('navigates to the movie detail page when a Watched-list entry is clicked', async () => {
+    getUserProfile.mockResolvedValue(baseProfile)
+    renderWithRouter()
+
+    await waitFor(() => expect(screen.getByText('Interstellar')).toBeInTheDocument())
+    fireEvent.click(screen.getByText('Interstellar'))
+
+    expect(await screen.findByText('Movie detail page')).toBeInTheDocument()
+  })
+
+  it('navigates to the movie detail page when a Recent Activity entry is clicked', async () => {
+    getUserProfile.mockResolvedValue(baseProfile)
+    renderWithRouter()
+
+    await waitFor(() => expect(screen.getByText('Hereditary')).toBeInTheDocument())
+    fireEvent.click(screen.getByText('Hereditary'))
+
+    expect(await screen.findByText('Movie detail page')).toBeInTheDocument()
   })
 
   it('renders the signed-in desktop shell (Sidebar + AppHeader)', async () => {
