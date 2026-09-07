@@ -32,6 +32,11 @@ export function EventsPage() {
     let cancelled = false
     setLoading(true)
     setError('')
+    // The previous tab's rows must not linger through the switch — left in
+    // place, a slow or failed fetch shows them under the new tab's own
+    // action label (e.g. "Upcoming" rows rendered with "Manage", the
+    // Hosting tab's label) instead of the empty/error state they should see.
+    setItems([])
     const fetcher = tab === 'upcoming' ? getUpcomingEvents() : getHostedEvents()
     fetcher
       .then((res) => {

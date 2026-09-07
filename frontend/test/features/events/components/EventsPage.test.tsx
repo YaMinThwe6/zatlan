@@ -103,6 +103,24 @@ describe('EventsPage', () => {
     expect(joinEvent).not.toHaveBeenCalled()
   })
 
+  it('clears the previous tab\'s items when switching tabs, so a slow or failed fetch never shows stale rows under the wrong tab\'s action label', async () => {
+    getUpcomingEvents.mockResolvedValue({ items: [upcomingEvent] })
+    let rejectHosting!: (err: Error) => void
+    getHostedEvents.mockReturnValue(new Promise((_resolve, reject) => { rejectHosting = reject }))
+    renderWithRouter()
+
+    expect(await screen.findByText('Interstellar')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Hosting' }))
+
+    // Stale "Upcoming" row must be gone immediately on switching tabs, not
+    // just once the new (still-pending) fetch eventually settles.
+    await waitFor(() => expect(screen.queryByText('Interstellar')).not.toBeInTheDocument())
+
+    rejectHosting(new Error('boom'))
+    expect(await screen.findByRole('alert')).toHaveTextContent('boom')
+    expect(screen.queryByText('Interstellar')).not.toBeInTheDocument()
+  })
+
   it('opens the create-event modal from "Host a watch party"', async () => {
     getUpcomingEvents.mockResolvedValue({ items: [] })
     renderWithRouter()
