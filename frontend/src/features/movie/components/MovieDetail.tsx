@@ -20,6 +20,7 @@ import { WatchedByFriends } from './WatchedByFriends'
 import { SimilarPicks } from './SimilarPicks'
 import { WatchTogether } from './WatchTogether'
 import { WatchTogetherGuest } from './WatchTogetherGuest'
+import { CreateEventModal } from '../../events/components/CreateEventModal'
 import { useAuth } from '../../../lib/AuthContext'
 import { posterUrl, backdropUrl } from '../../../lib/images'
 import { TrailerEmbed } from './TrailerEmbed'
@@ -73,6 +74,10 @@ export function MovieDetail() {
   const [status, setStatus] = useState<MovieStatus>(EMPTY_STATUS)
   const [statusError, setStatusError] = useState('')
   const [actionError, setActionError] = useState('')
+  // WatchedByFriends' empty-state "invite a friend" CTA — opens the same
+  // create-a-watch-party flow WatchTogether's own button does, pre-filled
+  // with this movie.
+  const [createPartyOpen, setCreatePartyOpen] = useState(false)
 
   const [reviews, setReviews] = useState<Review[]>([])
   const [reviewsError, setReviewsError] = useState('')
@@ -368,7 +373,12 @@ export function MovieDetail() {
           <div className="flex flex-col gap-7 lg:flex-row lg:gap-8">
             {!isGuest && (
               <section className="lg:flex-1">
-                <WatchedByFriends movieId={movieId} />
+                <WatchedByFriends
+                  movieId={movieId}
+                  watched={status.watched}
+                  onMarkWatched={() => toggle('watched')}
+                  onInviteFriend={() => setCreatePartyOpen(true)}
+                />
               </section>
             )}
             {isGuest && (
@@ -535,6 +545,16 @@ export function MovieDetail() {
         <AppHeader onSignOut={() => void signOutUser()} />
         <div className="lg:min-h-0 lg:flex-1 lg:overflow-y-auto">{content}</div>
       </main>
+      {createPartyOpen && movie && (
+        <CreateEventModal
+          initialMovie={{ movieId: movie.movieId, title: movie.title, poster: movie.poster, year: movie.year }}
+          onClose={() => setCreatePartyOpen(false)}
+          onCreated={(eventId) => {
+            setCreatePartyOpen(false)
+            navigate(`/events/${eventId}`)
+          }}
+        />
+      )}
     </div>
   )
 }

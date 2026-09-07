@@ -215,6 +215,31 @@ describe('MovieDetail', () => {
     expect(document.querySelector('img.poster')).not.toBeInTheDocument()
   })
 
+  it('invites the caller to mark the movie watched when no followed friend has and they haven\'t either — real bug: this slot used to just be an empty column beside "About"', async () => {
+    mockDefaults()
+    markWatched.mockResolvedValue(undefined)
+    likeMovie.mockResolvedValue(undefined)
+    renderWithRouter()
+
+    const button = await screen.findByRole('button', { name: /mark as watched/i })
+    fireEvent.click(button)
+
+    await waitFor(() => expect(markWatched).toHaveBeenCalledWith('movie-1'))
+  })
+
+  it('invites the caller to start a watch party when they\'ve already watched it but no followed friend has, opening the create-event flow pre-filled with this movie', async () => {
+    mockDefaults()
+    getMovieStatus.mockResolvedValue({ ...emptyStatus, watched: true })
+    renderWithRouter()
+
+    fireEvent.click(await screen.findByRole('button', { name: /invite a friend/i }))
+
+    expect(await screen.findByRole('dialog', { name: /host a watch party/i })).toBeInTheDocument()
+    // The movie is pre-selected (no "Which movie?" search step) — its title
+    // shows directly in the create form, confirming initialMovie was passed.
+    expect(screen.getAllByText('Dune: Part Two').length).toBeGreaterThan(0)
+  })
+
   it('renders streaming providers, synopsis, and cast', async () => {
     mockDefaults()
     renderWithRouter()

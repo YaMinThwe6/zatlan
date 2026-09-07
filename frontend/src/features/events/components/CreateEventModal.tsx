@@ -6,6 +6,10 @@ import { posterUrl } from '../../../lib/images'
 interface Props {
   onClose: () => void
   onCreated: (eventId: string) => void
+  // When given, skips the movie-search step entirely — the movie detail
+  // page's own "invite a friend" CTA already knows which movie, unlike the
+  // standalone Events page entry point below.
+  initialMovie?: MovieSummary
 }
 
 type LocationState = { status: 'idle' | 'locating' | 'captured' | 'error'; area: string; city: string; lat: number | null; lng: number | null }
@@ -14,8 +18,8 @@ const EMPTY_LOCATION: LocationState = { status: 'idle', area: '', city: '', lat:
 // Movie-first, then the same shape of form WatchTogether.tsx already uses on
 // a movie's own detail page — this is the standalone entry point for someone
 // starting from Events rather than from a movie they're already looking at.
-export function CreateEventModal({ onClose, onCreated }: Props) {
-  const [movie, setMovie] = useState<MovieSummary | null>(null)
+export function CreateEventModal({ onClose, onCreated, initialMovie }: Props) {
+  const [movie, setMovie] = useState<MovieSummary | null>(initialMovie ?? null)
   const [query, setQuery] = useState('')
   const [results, setResults] = useState<MovieSummary[]>([])
   const [searching, setSearching] = useState(false)
