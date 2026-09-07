@@ -61,6 +61,23 @@ describe('CelebritiesStep', () => {
     await waitFor(() => expect(followCelebrity).toHaveBeenCalledWith('p1'))
   })
 
+  it('ignores a second click on the same person while the first toggle is still in flight — same race WatchedStep had', async () => {
+    getCelebritySuggestions.mockResolvedValue({ items: suggestions })
+    let resolveFollow!: () => void
+    followCelebrity.mockReturnValue(new Promise<void>((resolve) => { resolveFollow = resolve }))
+    render(<CelebritiesStep onContinue={vi.fn()} onSkip={vi.fn()} />)
+
+    await waitFor(() => expect(screen.getAllByText('Jane Doe').length).toBeGreaterThan(0))
+    fireEvent.click(screen.getAllByText('Jane Doe')[0])
+    await waitFor(() => expect(followCelebrity).toHaveBeenCalledTimes(1))
+
+    fireEvent.click(screen.getAllByText('Jane Doe')[0])
+    expect(unfollowCelebrity).not.toHaveBeenCalled()
+    expect(followCelebrity).toHaveBeenCalledTimes(1)
+
+    resolveFollow()
+  })
+
   it('calls onContinue/onSkip directly', async () => {
     getCelebritySuggestions.mockResolvedValue({ items: [] })
     const onContinue = vi.fn()

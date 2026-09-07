@@ -44,6 +44,10 @@ export function CelebritiesStep({ genres = [], languages = [], initialFollowedId
   // same followed state instead of starting blank.
   const [followedIds, setFollowedIds] = useState<Set<string>>(() => new Set(initialFollowedIds ?? []))
   const [error, setError] = useState('')
+  // Same race as WatchedStep.tsx's toggle() had — guards against a rapid
+  // second click on the same person before the first follow/unfollow request
+  // has resolved, which otherwise fires the opposite call and races it.
+  const [pendingIds, setPendingIds] = useState<Set<string>>(new Set())
 
   const [query, setQuery] = useState('')
   const [results, setResults] = useState<PersonSummary[]>([])
@@ -73,7 +77,10 @@ export function CelebritiesStep({ genres = [], languages = [], initialFollowedId
   }, [query])
 
   async function toggle(personId: string) {
+    if (pendingIds.has(personId)) return // a toggle for this person is already in flight — ignore the extra click rather than race it
+
     const wasFollowed = followedIds.has(personId)
+    setPendingIds((prev) => new Set(prev).add(personId))
     setFollowedIds((prev) => {
       const next = new Set(prev)
       if (wasFollowed) next.delete(personId)
@@ -92,6 +99,12 @@ export function CelebritiesStep({ genres = [], languages = [], initialFollowedId
         return next
       })
       setError(err instanceof Error ? err.message : 'Failed to update')
+    } finally {
+      setPendingIds((prev) => {
+        const next = new Set(prev)
+        next.delete(personId)
+        return next
+      })
     }
   }
 
@@ -156,10 +169,18 @@ export function CelebritiesStep({ genres = [], languages = [], initialFollowedId
         <ul className="grid grid-cols-3 gap-x-3 gap-y-5">
           {displayed.map((person) => {
             const isFollowed = followedIds.has(person.personId)
+            const isPending = pendingIds.has(person.personId)
             const photo = posterUrl(person.photo, 'w185')
             return (
               <li key={person.personId}>
-                <button type="button" aria-pressed={isFollowed} onClick={() => toggle(person.personId)} className="flex w-full flex-col items-center">
+                <button
+                  type="button"
+                  aria-pressed={isFollowed}
+                  aria-busy={isPending}
+                  disabled={isPending}
+                  onClick={() => toggle(person.personId)}
+                  className={`flex w-full flex-col items-center ${isPending ? 'opacity-60' : ''}`}
+                >
                   <div
                     className={`relative flex h-20 w-20 items-center justify-center overflow-hidden rounded-full bg-surface-alt ${isFollowed ? 'border-2 border-accent' : 'border border-border'}`}
                   >
