@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, afterEach } from 'vitest'
+import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { MemoryRouter, Routes, Route } from 'react-router-dom'
 
@@ -9,6 +9,8 @@ const deleteEvent = vi.fn()
 const getJoinRequests = vi.fn()
 const approveJoinRequest = vi.fn()
 const denyJoinRequest = vi.fn()
+// AppHeader's own dependency — the shared shell every signed-in page renders.
+const getNotifications = vi.fn()
 vi.mock('../../../../src/features/home/services/homeApi', () => ({
   getEvent,
   joinEvent,
@@ -16,10 +18,19 @@ vi.mock('../../../../src/features/home/services/homeApi', () => ({
   deleteEvent,
   getJoinRequests,
   approveJoinRequest,
-  denyJoinRequest
+  denyJoinRequest,
+  getNotifications
+}))
+vi.mock('../../../../src/lib/AuthContext', () => ({
+  useAuth: () => ({ signOutUser: vi.fn() })
 }))
 
 const { EventDetailPage } = await import('../../../../src/features/events/components/EventDetailPage')
+
+beforeEach(() => {
+  // AppHeader's own fetch — not this file's focus.
+  getNotifications.mockResolvedValue({ items: [] })
+})
 
 afterEach(() => {
   getEvent.mockReset()
@@ -29,6 +40,7 @@ afterEach(() => {
   getJoinRequests.mockReset()
   approveJoinRequest.mockReset()
   denyJoinRequest.mockReset()
+  getNotifications.mockReset()
   vi.restoreAllMocks()
 })
 

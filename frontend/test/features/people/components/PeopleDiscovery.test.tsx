@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, afterEach } from 'vitest'
+import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { MemoryRouter, Routes, Route } from 'react-router-dom'
 
@@ -6,16 +6,27 @@ const getTasteMatches = vi.fn()
 const followUser = vi.fn()
 const unfollowUser = vi.fn()
 const getMe = vi.fn()
-vi.mock('../../../../src/features/home/services/homeApi', () => ({ getTasteMatches, followUser, unfollowUser }))
+// AppHeader's own dependency — the shared shell every signed-in page renders.
+const getNotifications = vi.fn()
+vi.mock('../../../../src/features/home/services/homeApi', () => ({ getTasteMatches, followUser, unfollowUser, getNotifications }))
 vi.mock('../../../../src/lib/api', () => ({ getMe }))
+vi.mock('../../../../src/lib/AuthContext', () => ({
+  useAuth: () => ({ user: { uid: 'me' }, loading: false, signInWithGoogle: vi.fn(), signInWithMicrosoft: vi.fn(), signInWithToken: vi.fn(), signOutUser: vi.fn() })
+}))
 
 const { PeopleDiscovery } = await import('../../../../src/features/people/components/PeopleDiscovery')
+
+beforeEach(() => {
+  // AppHeader's own fetch — not this file's focus.
+  getNotifications.mockResolvedValue({ items: [] })
+})
 
 afterEach(() => {
   getTasteMatches.mockReset()
   followUser.mockReset()
   unfollowUser.mockReset()
   getMe.mockReset()
+  getNotifications.mockReset()
 })
 
 function renderWithRouter() {

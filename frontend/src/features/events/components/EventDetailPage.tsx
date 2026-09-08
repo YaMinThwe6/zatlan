@@ -14,7 +14,9 @@ import {
 } from '../../home/services/homeApi'
 import { posterUrl } from '../../../lib/images'
 import { formatEventDate } from '../../../lib/eventDate'
+import { useAuth } from '../../../lib/AuthContext'
 import { Sidebar } from '../../../components/Sidebar'
+import { AppHeader } from '../../../components/AppHeader'
 import { MobileTabBar } from '../../../components/MobileTabBar'
 
 interface Props {
@@ -28,6 +30,7 @@ function formatDate(iso: string | null): string {
 export function EventDetailPage({ me }: Props) {
   const { eventId } = useParams<{ eventId: string }>()
   const navigate = useNavigate()
+  const { signOutUser } = useAuth()
   const [event, setEvent] = useState<EventDetail | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -166,6 +169,7 @@ export function EventDetailPage({ me }: Props) {
       <Sidebar active="events" />
 
       <main className="min-w-0 flex-1 pb-6 lg:flex lg:flex-col lg:overflow-y-auto lg:pb-10">
+        <AppHeader onSignOut={() => void signOutUser()} me={me} />
         <div className="mx-auto w-full max-w-2xl px-5 pt-4.5 lg:px-7 lg:pt-7">
           <button type="button" onClick={() => navigate('/events')} className="mb-4 text-[12.5px] font-semibold text-text-muted">
             ‹ Back to Events

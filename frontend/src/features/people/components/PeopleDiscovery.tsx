@@ -1,7 +1,9 @@
 import { useNavigate } from 'react-router-dom'
 import { usePersonSuggestions } from '../../home/hooks/usePersonSuggestions'
 import { PersonSuggestionCard } from '../../../components/PersonSuggestionCard'
+import { useAuth } from '../../../lib/AuthContext'
 import { Sidebar } from '../../../components/Sidebar'
+import { AppHeader } from '../../../components/AppHeader'
 import { MobileTabBar } from '../../../components/MobileTabBar'
 
 // The full-page counterpart to Home's "People you might vibe with" widget —
@@ -15,6 +17,7 @@ const DISCOVERY_LIMIT = 30
 
 export function PeopleDiscovery() {
   const navigate = useNavigate()
+  const { signOutUser } = useAuth()
   const { items, loading, error, toggleConnect } = usePersonSuggestions(DISCOVERY_LIMIT)
 
   return (
@@ -22,7 +25,8 @@ export function PeopleDiscovery() {
       <Sidebar active="people" />
 
       <main className="min-w-0 flex-1 pb-6 lg:flex lg:flex-col lg:pb-0">
-        <header className="flex items-center gap-3 border-b border-border-soft px-5 py-4 lg:px-7">
+        <AppHeader onSignOut={() => void signOutUser()} />
+        <header className="flex items-center gap-3 border-b border-border-soft px-5 py-4 lg:hidden">
           <h1 className="text-[17px] font-bold text-text">People</h1>
         </header>
 

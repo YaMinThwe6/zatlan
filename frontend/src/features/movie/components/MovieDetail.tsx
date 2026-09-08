@@ -26,6 +26,7 @@ import { posterUrl, backdropUrl } from '../../../lib/images'
 import { TrailerEmbed } from './TrailerEmbed'
 import { Sidebar } from '../../../components/Sidebar'
 import { AppHeader } from '../../../components/AppHeader'
+import { MobileTabBar } from '../../../components/MobileTabBar'
 
 const EMPTY_STATUS: MovieStatus = { watchlisted: false, watched: false, liked: false, review: null }
 
@@ -544,6 +545,7 @@ export function MovieDetail() {
       <main className="min-w-0 flex-1 lg:flex lg:flex-col">
         <AppHeader onSignOut={() => void signOutUser()} />
         <div className="lg:min-h-0 lg:flex-1 lg:overflow-y-auto">{content}</div>
+        <MobileTabBar active="profile" />
       </main>
       {createPartyOpen && movie && (
         <CreateEventModal

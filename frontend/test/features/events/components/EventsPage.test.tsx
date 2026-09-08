@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, afterEach } from 'vitest'
+import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { MemoryRouter, Routes, Route } from 'react-router-dom'
 
@@ -6,12 +6,26 @@ const getUpcomingEvents = vi.fn()
 const getHostedEvents = vi.fn()
 const joinEvent = vi.fn()
 const createEvent = vi.fn()
-vi.mock('../../../../src/features/home/services/homeApi', () => ({ getUpcomingEvents, getHostedEvents, joinEvent, createEvent }))
+// AppHeader's own dependency — the shared shell every signed-in page renders.
+const getNotifications = vi.fn()
+vi.mock('../../../../src/features/home/services/homeApi', () => ({ getUpcomingEvents, getHostedEvents, joinEvent, createEvent, getNotifications }))
 
 const searchMovies = vi.fn()
 vi.mock('../../../../src/features/movie/services/movieApi', () => ({ searchMovies }))
 
+const getMe = vi.fn()
+vi.mock('../../../../src/lib/api', () => ({ getMe }))
+vi.mock('../../../../src/lib/AuthContext', () => ({
+  useAuth: () => ({ user: { uid: 'host-1' }, loading: false, signInWithGoogle: vi.fn(), signInWithMicrosoft: vi.fn(), signInWithToken: vi.fn(), signOutUser: vi.fn() })
+}))
+
 const { EventsPage } = await import('../../../../src/features/events/components/EventsPage')
+
+beforeEach(() => {
+  // AppHeader's own fetches — not this file's focus.
+  getNotifications.mockResolvedValue({ items: [] })
+  getMe.mockResolvedValue({ uid: 'host-1', displayName: 'Yamin', email: 'yamin@example.com' })
+})
 
 afterEach(() => {
   getUpcomingEvents.mockReset()
@@ -19,6 +33,8 @@ afterEach(() => {
   joinEvent.mockReset()
   createEvent.mockReset()
   searchMovies.mockReset()
+  getNotifications.mockReset()
+  getMe.mockReset()
 })
 
 const upcomingEvent = {

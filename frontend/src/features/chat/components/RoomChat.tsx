@@ -3,6 +3,9 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { sendMessage, deleteMessage, subscribeToMessages, type RoomMessage } from '../services/roomApi'
 import { reportContent, type CreateReportResult } from '../../../lib/api'
 import { useAuth } from '../../../lib/AuthContext'
+import { Sidebar } from '../../../components/Sidebar'
+import { AppHeader } from '../../../components/AppHeader'
+import { MobileTabBar } from '../../../components/MobileTabBar'
 
 function formatTime(iso: string | null): string {
   if (!iso) return ''
@@ -29,7 +32,7 @@ export function RoomChat() {
   const { roomId: roomIdParam } = useParams<{ roomId: string }>()
   const roomId = roomIdParam!
   const navigate = useNavigate()
-  const { user } = useAuth()
+  const { user, signOutUser } = useAuth()
   const currentUid = user!.uid
   const [messages, setMessages] = useState<RoomMessage[]>([])
   const [connected, setConnected] = useState(false)
@@ -95,35 +98,40 @@ export function RoomChat() {
   const visibleMessages = messages.filter((m) => !m.deleted)
 
   return (
-    // No design-canvas reference exists for this screen (it was built
-    // free-form, unlike the auth/onboarding/movie/profile screens) — a
-    // simple centered, width-capped column rather than a bespoke desktop
-    // layout, so the chat surface doesn't stretch edge-to-edge on a wide
-    // viewport.
-    <main className="mx-auto flex min-h-svh w-full max-w-2xl flex-col bg-bg text-text md:h-svh md:min-h-0 md:border-x md:border-border-soft">
-      <header className="flex items-center gap-3 border-b border-border-soft px-4 py-3.5">
-        <button
-          type="button"
-          onClick={() => navigate(-1)}
-          aria-label="Back"
-          className="flex h-[34px] w-[34px] items-center justify-center rounded-full border border-border-soft bg-surface-alt"
-        >
-          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-            <path d="M15 18l-6-6 6-6" />
-          </svg>
-        </button>
-        <h1 className="text-[15px] font-bold text-text">Room chat</h1>
-      </header>
+    <div className="flex min-h-svh bg-bg text-text lg:h-svh">
+      <Sidebar />
+      <main className="min-w-0 flex-1 lg:flex lg:flex-col">
+        <AppHeader onSignOut={() => void signOutUser()} />
 
-      {!connected && <p className="px-4 py-2 text-[12.5px] text-text-muted">Connecting…</p>}
-      {error && (
-        <p role="alert" className="px-4 py-2 text-[13px] text-red-400">
-          {error}
-        </p>
-      )}
+        {/* No design-canvas reference exists for this screen (it was built
+            free-form, unlike the auth/onboarding/movie/profile screens) — a
+            simple centered, width-capped column rather than a bespoke desktop
+            layout, so the chat surface doesn't stretch edge-to-edge on a wide
+            viewport. */}
+        <div className="mx-auto flex w-full max-w-2xl flex-1 flex-col lg:min-h-0 lg:border-x lg:border-border-soft">
+          <header className="flex items-center gap-3 border-b border-border-soft px-4 py-3.5">
+            <button
+              type="button"
+              onClick={() => navigate(-1)}
+              aria-label="Back"
+              className="flex h-[34px] w-[34px] items-center justify-center rounded-full border border-border-soft bg-surface-alt"
+            >
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M15 18l-6-6 6-6" />
+              </svg>
+            </button>
+            <h1 className="text-[15px] font-bold text-text">Room chat</h1>
+          </header>
 
-      <ul className="flex flex-1 flex-col gap-3 overflow-y-auto px-4 py-4">
-        {visibleMessages.map((m) => {
+          {!connected && <p className="px-4 py-2 text-[12.5px] text-text-muted">Connecting…</p>}
+          {error && (
+            <p role="alert" className="px-4 py-2 text-[13px] text-red-400">
+              {error}
+            </p>
+          )}
+
+          <ul className="flex flex-1 flex-col gap-3 overflow-y-auto px-4 py-4">
+            {visibleMessages.map((m) => {
           const mine = m.authorId === currentUid
           return (
             <li key={m.messageId} className={`flex flex-col ${mine ? 'items-end' : 'items-start'}`}>
@@ -213,6 +221,10 @@ export function RoomChat() {
           Send
         </button>
       </form>
-    </main>
+        </div>
+
+        <MobileTabBar active="profile" />
+      </main>
+    </div>
   )
 }

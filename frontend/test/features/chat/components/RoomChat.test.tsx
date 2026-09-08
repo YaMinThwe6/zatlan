@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, afterEach } from 'vitest'
+import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { MemoryRouter, Routes, Route, Link } from 'react-router-dom'
 
@@ -7,9 +7,14 @@ const deleteMessage = vi.fn()
 const subscribeToMessages = vi.fn()
 const unsubscribe = vi.fn()
 const reportContent = vi.fn()
+const getMe = vi.fn()
+const getNotifications = vi.fn()
 
 vi.mock('../../../../src/features/chat/services/roomApi', () => ({ sendMessage, deleteMessage, subscribeToMessages }))
-vi.mock('../../../../src/lib/api', () => ({ reportContent }))
+vi.mock('../../../../src/lib/api', () => ({ reportContent, getMe }))
+// AppHeader's own dependencies — it's now part of RoomChat's shared shell
+// (Sidebar/AppHeader/MobileTabBar on every signed-in page).
+vi.mock('../../../../src/features/home/services/homeApi', () => ({ getNotifications }))
 vi.mock('../../../../src/lib/AuthContext', () => ({
   useAuth: () => ({
     user: { uid: 'uid-1' },
@@ -29,12 +34,21 @@ const messages = [
   { messageId: 'm3', authorId: 'uid-2', text: 'this got removed', createdAt: '2026-01-01T20:02:00.000Z', editedAt: null, deleted: true }
 ]
 
+beforeEach(() => {
+  // AppHeader's own fetches — not under test here, just needs to resolve so
+  // the shared shell renders without throwing.
+  getMe.mockResolvedValue({ uid: 'uid-1', displayName: 'Arjun', email: 'arjun@example.com' })
+  getNotifications.mockResolvedValue({ items: [] })
+})
+
 afterEach(() => {
   sendMessage.mockReset()
   deleteMessage.mockReset()
   subscribeToMessages.mockReset()
   unsubscribe.mockReset()
   reportContent.mockReset()
+  getMe.mockReset()
+  getNotifications.mockReset()
 })
 
 function mockSubscription(msgs: typeof messages) {
