@@ -25,8 +25,9 @@ function NavRow({ label, active, disabled, icon, onClick }: NavItem) {
   )
   if (disabled) {
     return (
-      <div title="Coming soon" className="cursor-default">
+      <div title="Coming soon" className="flex cursor-default items-center justify-between gap-2">
         {content}
+        <span className="flex-none rounded-full bg-[rgba(155,171,196,0.14)] px-2 py-0.5 text-[9.5px] font-bold text-text-faint">Coming soon</span>
       </div>
     )
   }
@@ -113,6 +114,18 @@ export function Sidebar({ active }: { active?: 'home' | 'search' | 'events' | 'p
           icon={
             <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
               <path d="M21 11.5a8.4 8.4 0 0 1-8.9 8.4 8.6 8.6 0 0 1-3.6-.8L3 20l1-4.9A8.4 8.4 0 1 1 21 11.5z" />
+            </svg>
+          }
+        />
+        <NavRow
+          label="Communities"
+          disabled
+          icon={
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <circle cx="8" cy="9" r="3" />
+              <circle cx="16" cy="9" r="3" />
+              <path d="M2 20c0-3.3 2.7-6 6-6s6 2.7 6 6" />
+              <path d="M10 20c0-3.3 2.7-6 6-6s6 2.7 6 6" />
             </svg>
           }
         />
