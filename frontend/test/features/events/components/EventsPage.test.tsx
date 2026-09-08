@@ -28,6 +28,7 @@ const upcomingEvent = {
   title: null,
   movieTitle: 'Interstellar',
   moviePoster: null,
+  hostDisplayName: 'Asha',
   datetime: '2099-06-01T20:00:00.000Z',
   mode: 'online' as const,
   location: null,
@@ -129,5 +130,120 @@ describe('EventsPage', () => {
     fireEvent.click(screen.getByRole('button', { name: /host a watch party/i }))
 
     expect(screen.getByRole('dialog', { name: /host a watch party/i })).toBeInTheDocument()
+  })
+
+  it('shows the host\'s display name on an Upcoming card', async () => {
+    getUpcomingEvents.mockResolvedValue({ items: [upcomingEvent] })
+    renderWithRouter()
+
+    expect(await screen.findByText(/hosted by asha/i)).toBeInTheDocument()
+  })
+
+  it('omits the host line on the Hosting tab — redundant, it\'s always the caller\'s own event', async () => {
+    getUpcomingEvents.mockResolvedValue({ items: [] })
+    getHostedEvents.mockResolvedValue({ items: [upcomingEvent] })
+    renderWithRouter()
+
+    await waitFor(() => expect(getUpcomingEvents).toHaveBeenCalled())
+    fireEvent.click(screen.getByRole('button', { name: 'Hosting' }))
+
+    expect(await screen.findByText('Interstellar')).toBeInTheDocument()
+    expect(screen.queryByText(/hosted by/i)).not.toBeInTheDocument()
+  })
+
+  describe('mode filter chips', () => {
+    const onlineEvent = { ...upcomingEvent, eventId: 'evt-online', movieTitle: 'Online Movie', mode: 'online' as const }
+    const inPersonEvent = {
+      ...upcomingEvent,
+      eventId: 'evt-in-person',
+      movieTitle: 'In Person Movie',
+      mode: 'in-person' as const,
+      location: { area: 'Guindy', city: 'Chennai' }
+    }
+
+    it('shows every mode by default', async () => {
+      getUpcomingEvents.mockResolvedValue({ items: [onlineEvent, inPersonEvent] })
+      renderWithRouter()
+
+      expect(await screen.findByText('Online Movie')).toBeInTheDocument()
+      expect(screen.getByText('In Person Movie')).toBeInTheDocument()
+    })
+
+    it('filters down to only Online when that chip is clicked', async () => {
+      getUpcomingEvents.mockResolvedValue({ items: [onlineEvent, inPersonEvent] })
+      renderWithRouter()
+
+      await screen.findByText('Online Movie')
+      fireEvent.click(screen.getByRole('button', { name: 'Online' }))
+
+      expect(screen.getByText('Online Movie')).toBeInTheDocument()
+      expect(screen.queryByText('In Person Movie')).not.toBeInTheDocument()
+    })
+
+    it('filters down to only In-person when that chip is clicked', async () => {
+      getUpcomingEvents.mockResolvedValue({ items: [onlineEvent, inPersonEvent] })
+      renderWithRouter()
+
+      await screen.findByText('Online Movie')
+      fireEvent.click(screen.getByRole('button', { name: 'In-person' }))
+
+      expect(screen.queryByText('Online Movie')).not.toBeInTheDocument()
+      expect(screen.getByText('In Person Movie')).toBeInTheDocument()
+    })
+  })
+
+  describe('sort control', () => {
+    const soonEvent = { ...upcomingEvent, eventId: 'evt-soon', movieTitle: 'Soon Movie', datetime: '2099-01-01T12:00:00.000Z', participantCount: 2 }
+    const laterButPopularEvent = {
+      ...upcomingEvent,
+      eventId: 'evt-popular',
+      movieTitle: 'Popular Movie',
+      datetime: '2099-06-01T12:00:00.000Z',
+      participantCount: 39
+    }
+
+    it('defaults to soonest first', async () => {
+      getUpcomingEvents.mockResolvedValue({ items: [laterButPopularEvent, soonEvent] })
+      renderWithRouter()
+
+      const titles = (await screen.findAllByText(/movie$/i)).map((el) => el.textContent)
+      expect(titles).toEqual(['Soon Movie', 'Popular Movie'])
+    })
+
+    it('reorders to most popular first when that sort is chosen', async () => {
+      getUpcomingEvents.mockResolvedValue({ items: [soonEvent, laterButPopularEvent] })
+      renderWithRouter()
+
+      await screen.findByText('Soon Movie')
+      fireEvent.change(screen.getByLabelText(/sort/i), { target: { value: 'popular' } })
+
+      const titles = screen.getAllByText(/movie$/i).map((el) => el.textContent)
+      expect(titles).toEqual(['Popular Movie', 'Soon Movie'])
+    })
+  })
+
+  it('groups events under This week / This weekend / Next week / Later headers', async () => {
+    // shouldAdvanceTime: true — real setTimeout/microtask progress for
+    // findByText's internal polling and the mocked fetch's promise, while
+    // Date() itself stays fixed for eventDateGroup's "now".
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    vi.setSystemTime(new Date('2026-01-06T12:00:00.000Z')) // Tuesday
+    try {
+      getUpcomingEvents.mockResolvedValue({
+        items: [
+          { ...upcomingEvent, eventId: 'evt-week', movieTitle: 'This Week Movie', datetime: '2026-01-08T12:00:00.000Z' },
+          { ...upcomingEvent, eventId: 'evt-weekend', movieTitle: 'Weekend Movie', datetime: '2026-01-10T12:00:00.000Z' },
+          { ...upcomingEvent, eventId: 'evt-next', movieTitle: 'Next Week Movie', datetime: '2026-01-12T12:00:00.000Z' },
+          { ...upcomingEvent, eventId: 'evt-later', movieTitle: 'Later Movie', datetime: '2026-02-01T12:00:00.000Z' }
+        ]
+      })
+      renderWithRouter()
+
+      expect(await screen.findByText('This Week Movie')).toBeInTheDocument()
+      const headers = screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)
+      expect(headers).toEqual(['This week', 'This weekend', 'Next week', 'Later'])
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })

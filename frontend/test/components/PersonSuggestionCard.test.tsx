@@ -48,4 +48,68 @@ describe('PersonSuggestionCard', () => {
     expect(onOpenProfile).toHaveBeenCalledWith('u42')
     expect(onToggleConnect).not.toHaveBeenCalled()
   })
+
+  describe('detailed variant (People Discovery page)', () => {
+    it('does not render matchReason text, genre tags, or follower count without the detailed prop — Home\'s compact rail widget', () => {
+      render(
+        <PersonSuggestionCard
+          person={person({ matchReason: 'genreOverlap', favoriteGenres: ['Sci-Fi', 'Drama'], followerCount: 128 })}
+          onOpenProfile={vi.fn()}
+          onToggleConnect={vi.fn()}
+        />
+      )
+      expect(screen.queryByText(/favorite genres/i)).not.toBeInTheDocument()
+      expect(screen.queryByText('Sci-Fi')).not.toBeInTheDocument()
+      expect(screen.queryByText(/128/)).not.toBeInTheDocument()
+    })
+
+    it('renders a readable reason for each matchReason value', () => {
+      const { rerender } = render(
+        <PersonSuggestionCard detailed person={person({ matchReason: 'tasteMatch' })} onOpenProfile={vi.fn()} onToggleConnect={vi.fn()} />
+      )
+      expect(screen.getByText(/similar taste in movies/i)).toBeInTheDocument()
+
+      rerender(<PersonSuggestionCard detailed person={person({ matchReason: 'genreOverlap' })} onOpenProfile={vi.fn()} onToggleConnect={vi.fn()} />)
+      expect(screen.getByText(/shares your favorite genres/i)).toBeInTheDocument()
+
+      rerender(<PersonSuggestionCard detailed person={person({ matchReason: 'languageOverlap' })} onOpenProfile={vi.fn()} onToggleConnect={vi.fn()} />)
+      expect(screen.getByText(/language/i)).toBeInTheDocument()
+
+      rerender(<PersonSuggestionCard detailed person={person({ matchReason: 'suggested' })} onOpenProfile={vi.fn()} onToggleConnect={vi.fn()} />)
+      expect(screen.getByText(/suggested for you/i)).toBeInTheDocument()
+    })
+
+    it('renders up to 3 favorite-genre tags', () => {
+      render(
+        <PersonSuggestionCard
+          detailed
+          person={person({ favoriteGenres: ['Sci-Fi', 'Drama', 'Thriller', 'Comedy'] })}
+          onOpenProfile={vi.fn()}
+          onToggleConnect={vi.fn()}
+        />
+      )
+      expect(screen.getByText('Sci-Fi')).toBeInTheDocument()
+      expect(screen.getByText('Drama')).toBeInTheDocument()
+      expect(screen.getByText('Thriller')).toBeInTheDocument()
+      expect(screen.queryByText('Comedy')).not.toBeInTheDocument()
+    })
+
+    it('renders follower count when there is at least one follower', () => {
+      render(<PersonSuggestionCard detailed person={person({ followerCount: 128 })} onOpenProfile={vi.fn()} onToggleConnect={vi.fn()} />)
+      expect(screen.getByText(/128/)).toBeInTheDocument()
+      expect(screen.getByText(/follower/i)).toBeInTheDocument()
+    })
+
+    it('omits the follower count line when there are none, rather than showing "0 followers"', () => {
+      render(<PersonSuggestionCard detailed person={person({ followerCount: 0 })} onOpenProfile={vi.fn()} onToggleConnect={vi.fn()} />)
+      expect(screen.queryByText(/follower/i)).not.toBeInTheDocument()
+    })
+
+    it('tolerates missing favoriteGenres/followerCount from an older cached response instead of crashing', () => {
+      const incomplete = { ...person(), favoriteGenres: undefined, followerCount: undefined } as unknown as ReturnType<typeof person>
+      expect(() =>
+        render(<PersonSuggestionCard detailed person={incomplete} onOpenProfile={vi.fn()} onToggleConnect={vi.fn()} />)
+      ).not.toThrow()
+    })
+  })
 })

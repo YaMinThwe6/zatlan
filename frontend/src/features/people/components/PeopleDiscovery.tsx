@@ -38,7 +38,13 @@ export function PeopleDiscovery() {
             {!loading && !error && items.length > 0 && (
               <ul className="flex flex-wrap gap-3 lg:flex-col lg:gap-3.5">
                 {items.map((person) => (
-                  <PersonSuggestionCard key={person.uid} person={person} onOpenProfile={(uid) => navigate(`/profile/${uid}`)} onToggleConnect={toggleConnect} />
+                  <PersonSuggestionCard
+                    key={person.uid}
+                    person={person}
+                    onOpenProfile={(uid) => navigate(`/profile/${uid}`)}
+                    onToggleConnect={toggleConnect}
+                    detailed
+                  />
                 ))}
               </ul>
             )}
