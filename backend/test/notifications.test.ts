@@ -133,3 +133,40 @@ describe("PATCH /users/me/notifications/:id", () => {
     expect(res.status).toBe(400);
   });
 });
+
+describe("POST /users/me/notifications/clear", () => {
+  it("401s without a token", async () => {
+    const app = createApp();
+    const res = await request(app).post("/users/me/notifications/clear");
+    expect(res.status).toBe(401);
+  });
+
+  it("marks every one of the caller's unread notifications read", async () => {
+    store.set("users/uid-1/notifications/n1", { type: "followRequest", read: false, createdAt: new Date("2026-01-01") });
+    store.set("users/uid-1/notifications/n2", { type: "eventJoinApproved", read: false, createdAt: new Date("2026-01-02") });
+    store.set("users/uid-1/notifications/n3", { type: "chatActive", read: true, createdAt: new Date("2026-01-03") });
+    const app = createApp();
+    const res = await request(app).post("/users/me/notifications/clear").set("Authorization", "Bearer good");
+    expect(res.status).toBe(204);
+
+    expect((store.get("users/uid-1/notifications/n1") as { read: boolean }).read).toBe(true);
+    expect((store.get("users/uid-1/notifications/n2") as { read: boolean }).read).toBe(true);
+    expect((store.get("users/uid-1/notifications/n3") as { read: boolean }).read).toBe(true);
+  });
+
+  it("only touches the caller's own notifications, not another user's", async () => {
+    store.set("users/uid-1/notifications/n1", { type: "followRequest", read: false, createdAt: new Date() });
+    store.set("users/uid-2/notifications/n2", { type: "followRequest", read: false, createdAt: new Date() });
+    const app = createApp();
+    await request(app).post("/users/me/notifications/clear").set("Authorization", "Bearer good");
+
+    expect((store.get("users/uid-1/notifications/n1") as { read: boolean }).read).toBe(true);
+    expect((store.get("users/uid-2/notifications/n2") as { read: boolean }).read).toBe(false);
+  });
+
+  it("is a no-op success when there's nothing to clear", async () => {
+    const app = createApp();
+    const res = await request(app).post("/users/me/notifications/clear").set("Authorization", "Bearer good");
+    expect(res.status).toBe(204);
+  });
+});

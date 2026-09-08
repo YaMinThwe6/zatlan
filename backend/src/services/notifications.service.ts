@@ -55,6 +55,19 @@ export async function listNotifications(uid: string, rawLimit: unknown, unreadOn
   return { items };
 }
 
+// POST /users/me/notifications/clear — the notification center's "Clear
+// all" button. Bulk-marks every one of the caller's own unread notifications
+// read (never touches anyone else's) — no batch write in this hand-rolled
+// mock's vocabulary, so this reads then updates each doc individually, same
+// as everywhere else in this codebase that needs "every doc under a
+// subcollection" (small per-user volume, fine at this app's scale).
+export async function clearAllNotifications(uid: string): Promise<void> {
+  const db = requireDb();
+  const col = db.collection("users").doc(uid).collection("notifications");
+  const snap = await col.where("read", "==", false).get();
+  await Promise.all(snap.docs.map((d) => col.doc(d.id).update({ read: true })));
+}
+
 export async function markNotificationRead(uid: string, notificationId: string, read: unknown): Promise<void> {
   if (read !== true) {
     throw new AppError("INVALID_BODY", "Only { read: true } is supported", 400);
