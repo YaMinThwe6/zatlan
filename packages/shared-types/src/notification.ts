@@ -1,7 +1,18 @@
 // Notifications (hld.md §17, api-contracts.md §10). `type` is currently written
 // by exactly two flows — Follow and Events — via the backend's shared
 // `notify.ts` helper; the rest of §17's type list lands with their owning flows.
-export type NotificationType = 'followRequest' | 'followApproved' | 'eventJoinRequest' | 'eventJoinApproved' | 'eventJoinDenied' | 'moderationWarning'
+export type NotificationType =
+  | 'followRequest'
+  | 'followApproved'
+  | 'eventJoinRequest'
+  | 'eventJoinApproved'
+  | 'eventJoinDenied'
+  // Sent to a room's other members when a message lands and the room hasn't
+  // already notified them in the last 30 minutes (rooms.service.ts's
+  // sendMessage) — "this chat is active" rather than "you have a new
+  // message", so it's throttled per room, not per message.
+  | 'chatActive'
+  | 'moderationWarning'
 
 export interface NotificationItem {
   id: string

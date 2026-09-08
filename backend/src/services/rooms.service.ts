@@ -1,8 +1,15 @@
 import { requireDb } from "../lib/firebaseAdmin.js";
 import { AppError } from "../utils/AppError.js";
+import { writeNotification } from "../lib/notify.js";
 import { createEvent, type CreateEventInput } from "./events.service.js";
 
 const MAX_MESSAGE_LENGTH = 2000;
+const CHAT_ACTIVE_NOTIFY_WINDOW_MS = 30 * 60 * 1000;
+
+function toMillis(value: FirebaseFirestore.Timestamp | Date | undefined): number {
+  if (!value) return 0;
+  return value instanceof Date ? value.getTime() : value.toDate().getTime();
+}
 
 function toIso(value: FirebaseFirestore.Timestamp | Date | null): string | null {
   if (!value) return null;
@@ -50,6 +57,15 @@ export async function sendMessage(uid: string, roomId: string, rawText: unknown)
   const messageRef = roomRef.collection("messages").doc();
   const now = new Date();
   await messageRef.set({ authorId: uid, text, createdAt: now, editedAt: null, deleted: false });
+
+  // "This chat is live" rather than "you have a new message" — throttled per
+  // room so an active conversation doesn't spam every member on every reply.
+  const lastNotifiedMs = toMillis(room.lastChatNotifiedAt as FirebaseFirestore.Timestamp | Date | undefined);
+  if (now.getTime() - lastNotifiedMs >= CHAT_ACTIVE_NOTIFY_WINDOW_MS) {
+    await roomRef.update({ lastChatNotifiedAt: now });
+    const memberIds = (room.memberIds as string[] | undefined) ?? [];
+    await Promise.all(memberIds.filter((memberId) => memberId !== uid).map((memberId) => writeNotification(memberId, "chatActive", uid, "room", roomId)));
+  }
 
   return { messageId: messageRef.id, createdAt: toIso(now) };
 }

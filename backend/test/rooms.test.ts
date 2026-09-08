@@ -53,6 +53,11 @@ function collectionRef(path: string) {
   }
   return {
     doc: (id?: string) => docRef(`${path}/${id ?? `auto-${++autoCounter}`}`),
+    add: async (value: DocData) => {
+      const ref = docRef(`${path}/auto-${++autoCounter}`);
+      await ref.set(value);
+      return ref;
+    },
     ...query({})
   };
 }
@@ -173,6 +178,53 @@ describe("POST /rooms/:roomId/messages", () => {
 
     const stored = store.get(`rooms/room-1/messages/${res.body.data.messageId}`) as { authorId: string; text: string; deleted: boolean };
     expect(stored).toEqual(expect.objectContaining({ authorId: "uid-1", text: "Hey, starting soon!", deleted: false }));
+  });
+
+  it("notifies the other room members that the chat is live when it hasn't notified in the last 30 minutes", async () => {
+    store.set("rooms/room-1", { type: "ephemeral", originEventId: "evt-1", memberIds: ["uid-1", "uid-2", "uid-3"] });
+    const app = createApp();
+    const res = await authed(app, "post", "/rooms/room-1/messages").send({ text: "anyone around?" });
+    expect(res.status).toBe(201);
+
+    const uid2Notifications = [...store.entries()].filter(([key]) => key.startsWith("users/uid-2/notifications/"));
+    const uid3Notifications = [...store.entries()].filter(([key]) => key.startsWith("users/uid-3/notifications/"));
+    expect(uid2Notifications).toHaveLength(1);
+    expect(uid2Notifications[0][1]).toMatchObject({ type: "chatActive", fromUserId: "uid-1", targetType: "room", targetId: "room-1" });
+    expect(uid3Notifications).toHaveLength(1);
+
+    // the sender doesn't notify themselves
+    const uid1Notifications = [...store.entries()].filter(([key]) => key.startsWith("users/uid-1/notifications/"));
+    expect(uid1Notifications).toHaveLength(0);
+  });
+
+  it("doesn't re-notify within 30 minutes of the room's last chat-active notification", async () => {
+    store.set("rooms/room-1", {
+      type: "ephemeral",
+      originEventId: "evt-1",
+      memberIds: ["uid-1", "uid-2"],
+      lastChatNotifiedAt: new Date(Date.now() - 5 * 60 * 1000)
+    });
+    const app = createApp();
+    const res = await authed(app, "post", "/rooms/room-1/messages").send({ text: "still here" });
+    expect(res.status).toBe(201);
+
+    const uid2Notifications = [...store.entries()].filter(([key]) => key.startsWith("users/uid-2/notifications/"));
+    expect(uid2Notifications).toHaveLength(0);
+  });
+
+  it("notifies again once 30+ minutes have passed since the last chat-active notification", async () => {
+    store.set("rooms/room-1", {
+      type: "ephemeral",
+      originEventId: "evt-1",
+      memberIds: ["uid-1", "uid-2"],
+      lastChatNotifiedAt: new Date(Date.now() - 31 * 60 * 1000)
+    });
+    const app = createApp();
+    const res = await authed(app, "post", "/rooms/room-1/messages").send({ text: "back again" });
+    expect(res.status).toBe(201);
+
+    const uid2Notifications = [...store.entries()].filter(([key]) => key.startsWith("users/uid-2/notifications/"));
+    expect(uid2Notifications).toHaveLength(1);
   });
 });
 
