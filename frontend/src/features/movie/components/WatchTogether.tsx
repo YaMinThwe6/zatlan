@@ -131,8 +131,14 @@ export function WatchTogether({ movieId }: Props) {
         <ul className="mb-3.5 flex flex-col gap-2.5">
           {items.map((event) => {
             // See Home's UpcomingEvents.tsx for why this falls back to
-            // event.joined — joinStatus alone starts empty on every load.
-            const status = joinStatus[event.eventId] ?? (event.joined ? 'joined' : undefined)
+            // event.joined/event.pending — joinStatus alone starts empty on
+            // every load. Real bug: this file was missed when that fix
+            // landed elsewhere (EventsPage/UpcomingEvents/NearbyEvents), so
+            // a pending request kept reverting to "Join" here specifically —
+            // reported multiple times because this is the movie detail
+            // page's own "Watch together" section, a different component
+            // than the three that got fixed.
+            const status = joinStatus[event.eventId] ?? (event.joined ? 'joined' : event.pending ? 'pending' : undefined)
             return (
               <li key={event.eventId} className="flex items-center gap-2.5 rounded-xl border border-border-soft bg-surface p-2.5">
                 <div className="h-9.5 w-9.5 flex-none rounded-lg bg-surface-alt" />
