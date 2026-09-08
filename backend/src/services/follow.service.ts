@@ -1,3 +1,4 @@
+import type { FollowRequest } from "@binj/shared-types";
 import { requireDb } from "../lib/firebaseAdmin.js";
 import { writeNotification } from "../lib/notify.js";
 import { AppError } from "../utils/AppError.js";
@@ -51,7 +52,7 @@ export async function unfollowUser(callerUid: string, targetUid: string): Promis
 }
 
 // GET /users/me/followRequests — pending requests FOR the caller to approve/deny.
-export async function listFollowRequests(uid: string) {
+export async function listFollowRequests(uid: string): Promise<{ items: FollowRequest[] }> {
   const db = requireDb();
   const snap = await db.collection("users").doc(uid).collection("followRequests").get();
   const items = await Promise.all(

@@ -33,18 +33,49 @@ export interface EventSummary {
   requiresApproval: boolean
   roomId: string // hld.md §16 — every event has exactly one chat room
   createdAt: string | null
+  // Whether the caller has already joined — false for a signed-out guest
+  // (nothing to check them against) rather than omitted, so the frontend's
+  // Join/Joined button state can be initialized correctly on first render
+  // instead of always starting as "Join" until clicked.
+  joined: boolean
+  // Whether the caller has an outstanding join request awaiting the host's
+  // approval on an approval-required event. A separate flag from `joined`
+  // (never both true) — without it, a pending request was indistinguishable
+  // from never having requested at all once the page refreshed, since only
+  // `joined` survived a reload; the button silently reverted from
+  // "Requested" back to "Join".
+  pending: boolean
 }
 
-// GET /events/upcoming item — EventSummary joined with the movie it's for.
+// GET /events/upcoming item — EventSummary joined with the movie it's for,
+// and the host's displayName (the Events page card's "Hosted by" line).
 export interface UpcomingEvent extends EventSummary {
   movieTitle: string | null
   moviePoster: string | null
+  hostDisplayName: string
 }
 
 // GET /events/nearby item — hld.md §9. Same shape as UpcomingEvent, plus the
 // caller-relative distance the geohash-range query was filtered/sorted by.
 export interface NearbyEvent extends UpcomingEvent {
   distanceKm: number
+}
+
+// GET /events/:eventId — same fields as UpcomingEvent (hostDisplayName
+// included), plus the caller's own relationship to the event so the
+// Join/Requested/Chat button renders correctly on first load, not just
+// after clicking something.
+export interface EventDetail extends UpcomingEvent {
+  viewerStatus: 'host' | 'joined' | 'pending' | 'none'
+}
+
+// GET /events/:eventId/joinRequests item — host-only (events.service.ts's
+// listJoinRequests checks hostId === caller). One row per person awaiting
+// approval on an approval-required event, for the host's own event detail
+// page to render Approve/Deny against.
+export interface EventJoinRequest {
+  uid: string
+  displayName: string
 }
 
 // POST /events request body — hld.md §7 "Create Event", api-contracts.md §8.

@@ -18,5 +18,9 @@ export interface UserProfile {
   notificationPrefs: { emailEnabled: boolean }
   themePreference: 'dark' | 'light' | 'system'
   accentTheme: 'emerald' | 'cyan' | 'purple' | 'pink' | 'amber' | 'red'
+  // Opt-out of GET /discover/people (the signed-out Discover page's "top
+  // followed users" teaser) — distinct from listVisible, which only gates
+  // the watched list.
+  hideFromDiscovery: boolean
   isNewUser: boolean
 }

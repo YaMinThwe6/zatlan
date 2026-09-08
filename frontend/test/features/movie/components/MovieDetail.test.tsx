@@ -87,6 +87,20 @@ function mockDefaults() {
   getMovieReviews.mockResolvedValue({ items: [], nextCursor: null })
 }
 
+// The Watchlist/Watched/Like action-bar buttons (ActionButton in
+// MovieDetail.tsx) share their exact accessible name with Sidebar's own
+// "Watchlist"/"Watched"/"Ratings & Reviews" nav rows (rendered for real
+// alongside this page, not mocked away) — an ordinary getAllByRole(...)[0]
+// stopped reliably picking the real toggle once Sidebar's rows became real
+// buttons instead of a disabled <div>. ActionButton is the only one of the
+// two that's an actual pressed/unpressed toggle (aria-pressed set), so that's
+// the real distinguishing feature — not DOM order, which is fragile.
+function actionButton(name: RegExp) {
+  const match = screen.getAllByRole('button', { name }).find((el) => el.hasAttribute('aria-pressed'))
+  if (!match) throw new Error(`No action-bar button found matching ${name}`)
+  return match
+}
+
 afterEach(() => {
   vi.clearAllMocks()
   authUser = { uid: 'uid-1' }
@@ -137,9 +151,9 @@ describe('MovieDetail', () => {
     getMovieReviews.mockResolvedValue({ items: [], nextCursor: null })
     renderWithRouter()
 
-    await waitFor(() => expect(screen.getAllByRole('button', { name: /watchlist/i })[0]).toHaveAttribute('aria-pressed', 'true'))
-    expect(screen.getAllByRole('button', { name: /^watched$/i })[0]).toHaveAttribute('aria-pressed', 'false')
-    expect(screen.getAllByRole('button', { name: /^like$/i })[0]).toHaveAttribute('aria-pressed', 'true')
+    await waitFor(() => expect(actionButton(/watchlist/i)).toHaveAttribute('aria-pressed', 'true'))
+    expect(actionButton(/^watched$/i)).toHaveAttribute('aria-pressed', 'false')
+    expect(actionButton(/^like$/i)).toHaveAttribute('aria-pressed', 'true')
   })
 
   it('toggling watchlist calls addToWatchlist optimistically and updates pressed state', async () => {
@@ -147,10 +161,10 @@ describe('MovieDetail', () => {
     addToWatchlist.mockResolvedValue(undefined)
     renderWithRouter()
 
-    await waitFor(() => expect(screen.getAllByRole('button', { name: /watchlist/i })[0]).toBeInTheDocument())
-    fireEvent.click(screen.getAllByRole('button', { name: /watchlist/i })[0])
+    await waitFor(() => expect(actionButton(/watchlist/i)).toBeInTheDocument())
+    fireEvent.click(actionButton(/watchlist/i))
 
-    expect(screen.getAllByRole('button', { name: /watchlist/i })[0]).toHaveAttribute('aria-pressed', 'true')
+    expect(actionButton(/watchlist/i)).toHaveAttribute('aria-pressed', 'true')
     await waitFor(() => expect(addToWatchlist).toHaveBeenCalledWith('movie-1'))
   })
 
@@ -159,10 +173,10 @@ describe('MovieDetail', () => {
     addToWatchlist.mockRejectedValue(new Error('network error'))
     renderWithRouter()
 
-    await waitFor(() => expect(screen.getAllByRole('button', { name: /watchlist/i })[0]).toBeInTheDocument())
-    fireEvent.click(screen.getAllByRole('button', { name: /watchlist/i })[0])
+    await waitFor(() => expect(actionButton(/watchlist/i)).toBeInTheDocument())
+    fireEvent.click(actionButton(/watchlist/i))
 
-    await waitFor(() => expect(screen.getAllByRole('button', { name: /watchlist/i })[0]).toHaveAttribute('aria-pressed', 'false'))
+    await waitFor(() => expect(actionButton(/watchlist/i)).toHaveAttribute('aria-pressed', 'false'))
     expect(screen.getByRole('alert')).toHaveTextContent('network error')
   })
 
@@ -172,9 +186,9 @@ describe('MovieDetail', () => {
     likeMovie.mockResolvedValue(undefined)
     renderWithRouter()
 
-    await waitFor(() => expect(screen.getAllByRole('button', { name: /^watched$/i })[0]).toBeInTheDocument())
-    fireEvent.click(screen.getAllByRole('button', { name: /^watched$/i })[0])
-    fireEvent.click(screen.getAllByRole('button', { name: /^like$/i })[0])
+    await waitFor(() => expect(actionButton(/^watched$/i)).toBeInTheDocument())
+    fireEvent.click(actionButton(/^watched$/i))
+    fireEvent.click(actionButton(/^like$/i))
 
     await waitFor(() => expect(markWatched).toHaveBeenCalledWith('movie-1'))
     await waitFor(() => expect(likeMovie).toHaveBeenCalledWith('movie-1'))
@@ -189,12 +203,55 @@ describe('MovieDetail', () => {
     await waitFor(() => expect(document.querySelector('img.poster')).toHaveAttribute('src', 'https://image.tmdb.org/t/p/w500/dune2.jpg'))
   })
 
+  it('shows a Play trailer button in the hero when the movie has a trailer', async () => {
+    getMovie.mockResolvedValueOnce({ ...movie, trailerKey: 'abc123' })
+    getMovieStatus.mockResolvedValue(emptyStatus)
+    getMovieReviews.mockResolvedValue({ items: [], nextCursor: null })
+    renderWithRouter()
+
+    expect(await screen.findByRole('button', { name: /play trailer/i })).toBeInTheDocument()
+  })
+
+  it('renders the widescreen backdrop image alongside the poster when the movie has one', async () => {
+    getMovie.mockResolvedValueOnce({ ...movie, backdrop: '/wide.jpg' })
+    getMovieStatus.mockResolvedValue(emptyStatus)
+    getMovieReviews.mockResolvedValue({ items: [], nextCursor: null })
+    renderWithRouter()
+
+    await waitFor(() => expect(document.querySelector('img[src*="w1280/wide.jpg"]')).toBeInTheDocument())
+  })
+
   it('renders no poster image when the movie has none', async () => {
     mockDefaults() // fixture's poster is null
     renderWithRouter()
 
     await waitFor(() => expect(screen.getByText('Dune: Part Two')).toBeInTheDocument())
     expect(document.querySelector('img.poster')).not.toBeInTheDocument()
+  })
+
+  it('invites the caller to mark the movie watched when no followed friend has and they haven\'t either — real bug: this slot used to just be an empty column beside "About"', async () => {
+    mockDefaults()
+    markWatched.mockResolvedValue(undefined)
+    likeMovie.mockResolvedValue(undefined)
+    renderWithRouter()
+
+    const button = await screen.findByRole('button', { name: /mark as watched/i })
+    fireEvent.click(button)
+
+    await waitFor(() => expect(markWatched).toHaveBeenCalledWith('movie-1'))
+  })
+
+  it('invites the caller to start a watch party when they\'ve already watched it but no followed friend has, opening the create-event flow pre-filled with this movie', async () => {
+    mockDefaults()
+    getMovieStatus.mockResolvedValue({ ...emptyStatus, watched: true })
+    renderWithRouter()
+
+    fireEvent.click(await screen.findByRole('button', { name: /invite a friend/i }))
+
+    expect(await screen.findByRole('dialog', { name: /host a watch party/i })).toBeInTheDocument()
+    // The movie is pre-selected (no "Which movie?" search step) — its title
+    // shows directly in the create form, confirming initialMovie was passed.
+    expect(screen.getAllByText('Dune: Part Two').length).toBeGreaterThan(0)
   })
 
   it('renders streaming providers, synopsis, and cast', async () => {
@@ -380,6 +437,26 @@ describe('MovieDetail — signed-out visitor (public Discover)', () => {
     await waitFor(() => expect(screen.getByText('Meera')).toBeInTheDocument())
     expect(screen.queryByRole('button', { name: /^write a review$/i })).not.toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: /sign in to write a review/i }))
+    expect(await screen.findByText('Get started page')).toBeInTheDocument()
+  })
+
+  it('shows a scheduled watch party for this movie with a Sign in to join CTA', async () => {
+    mockAuthUser(null)
+    mockDefaults()
+    getUpcomingEvents.mockResolvedValue({
+      items: [
+        {
+          eventId: 'e1', hostId: 'host-1', movieId: 'movie-1', title: 'Dune Watch Party', datetime: '2099-06-01T20:00:00.000Z',
+          mode: 'online', location: null, preciseLocation: null, visibility: 'public', joinCode: null,
+          participantLimit: 10, participantCount: 3, requiresApproval: false, roomId: 'r1', createdAt: null, joined: false,
+          movieTitle: 'Dune: Part Two', moviePoster: null
+        }
+      ]
+    })
+    renderWithRouter()
+
+    expect(await screen.findByText('Dune Watch Party')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /sign in to join/i }))
     expect(await screen.findByText('Get started page')).toBeInTheDocument()
   })
 })

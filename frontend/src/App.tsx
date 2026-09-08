@@ -9,7 +9,10 @@ import { Home } from './features/home/components/Home'
 import { MovieSearch } from './features/movie/components/MovieSearch'
 import { MovieDetail } from './features/movie/components/MovieDetail'
 import { Profile } from './features/profile/components/Profile'
+import { PeopleDiscovery } from './features/people/components/PeopleDiscovery'
 import { Settings } from './features/settings/components/Settings'
+import { EventsPage } from './features/events/components/EventsPage'
+import { EventDetailPage } from './features/events/components/EventDetailPage'
 import { RoomChat } from './features/chat/components/RoomChat'
 import { About } from './features/about/components/About'
 import './App.css'
@@ -63,7 +66,12 @@ function App() {
       <OnboardingWizard
         initialDisplayName={me.displayName || user.displayName || ''}
         email={me.email || user.email || ''}
-        onComplete={() => setMe({ ...me, onboardingComplete: true })}
+        // isNewUser is server-computed true only on the one bootstrap GET
+        // /users/me right after account creation (see users.service.ts) —
+        // nothing ever naturally resets it to false client-side afterward,
+        // so without setting it here too, the gate above (isNewUser ||
+        // !onboardingComplete) never releases even once onboarding finishes.
+        onComplete={() => setMe({ ...me, onboardingComplete: true, isNewUser: false })}
       />
     )
   }
@@ -89,8 +97,11 @@ function App() {
       <Route path="/" element={<Home me={me} onSignOut={() => void signOutUser()} />} />
       <Route path="/search" element={<MovieSearch />} />
       <Route path="/movie/:movieId" element={<MovieDetail />} />
+      <Route path="/people" element={<PeopleDiscovery />} />
       <Route path="/profile/:uid" element={<Profile />} />
       <Route path="/settings" element={<Settings me={me} onUpdateMe={setMe} />} />
+      <Route path="/events" element={<EventsPage />} />
+      <Route path="/events/:eventId" element={<EventDetailPage me={me} />} />
       <Route path="/rooms/:roomId" element={<RoomChat />} />
       <Route path="/story" element={<About />} />
       <Route path="*" element={<Navigate to="/" replace />} />

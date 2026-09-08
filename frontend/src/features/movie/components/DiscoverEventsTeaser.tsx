@@ -1,15 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { getUpcomingEvents, type UpcomingEvent } from '../../home/services/homeApi'
-
-function formatDate(iso: string | null): string {
-  if (!iso) return ''
-  return (
-    new Date(iso).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' }) +
-    ' · ' +
-    new Date(iso).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
-  )
-}
+import { formatEventDate as formatDate } from '../../../lib/eventDate'
 
 // Guest-only right-rail teaser on the public Discover page — reuses the same
 // GET /events/upcoming Home's own UpcomingEvents calls, safe for a

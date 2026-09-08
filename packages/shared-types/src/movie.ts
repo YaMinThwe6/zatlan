@@ -9,6 +9,27 @@ export interface MovieSummary {
   year: number | null
 }
 
+// GET /users/me/watchlist item — the caller's own watchlist entry, movie
+// details already joined in (title/poster) so the Profile page's Watchlist
+// tab doesn't need a second round-trip per movie.
+export interface MyWatchlistEntry {
+  movieId: string
+  title: string | null
+  poster: string | null
+  addedAt: string | null
+}
+
+// GET /users/me/watched item — same "movie details already joined in" shape
+// as MyWatchlistEntry, plus the per-entry visibility already stored
+// alongside it (PATCH /users/me/watched/:movieId).
+export interface MyWatchedEntry {
+  movieId: string
+  title: string | null
+  poster: string | null
+  watchedAt: string | null
+  visibility: 'public' | 'private'
+}
+
 // GET /discover/movies?genre=Horror&language=ko&page=1 — a browse-by-facet
 // listing (not a text search): every movie TMDB has in that genre and/or
 // original language, popularity-ordered, paginated. `page`/`totalPages` drive
@@ -50,6 +71,12 @@ export interface MovieDetail extends MovieSummary {
   voteAverage: number
   voteCount: number
   trailerKey: string | null
+  // Widescreen key art, distinct from `poster` (portrait) — TMDB's own
+  // backdrop_path. Movie detail's hero uses this for the large image
+  // alongside the trailer-embed slot; not returned by the leaner list
+  // shapes above (MovieSummary/RecommendationItem/etc.) since they only
+  // ever render the small poster.
+  backdrop: string | null
   streamingProviders: StreamingProvider[]
   // BINJ's own aggregate rating (hld.md §20) and like count — always present in
   // the response, defaulting to zero when absent from storage (a movie that's

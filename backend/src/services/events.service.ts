@@ -1,6 +1,5 @@
 import { randomBytes } from "node:crypto";
-import type { EventSummary, UpcomingEvent, NearbyEvent } from "@binj/shared-types";
-type EventDetail = UpcomingEvent;
+import type { EventSummary, UpcomingEvent, NearbyEvent, EventDetail, EventJoinRequest } from "@binj/shared-types";
 import { requireDb } from "../lib/firebaseAdmin.js";
 import { writeNotification } from "../lib/notify.js";
 import { AppError } from "../utils/AppError.js";
@@ -56,7 +55,15 @@ function isValidLocationInput(location: unknown): location is { area: string; ci
 // browsing events; the exact meeting spot is only revealed to the host or
 // someone who has actually joined. Callers decide `canSeePrecise` per
 // endpoint (see each call site below) — never trust a client-supplied flag.
-function toEventSummary(id: string, data: FirebaseFirestore.DocumentData, canSeePrecise: boolean): EventSummary {
+//
+// `joined` is a SEPARATE flag, not derived from canSeePrecise — the two
+// don't coincide at every call site (listUpcomingEvents/listNearbyEvents
+// hardcode canSeePrecise for privacy reasons regardless of actual join
+// status). Without this, every list of events started every page load with
+// no way to know the caller had already joined something — the frontend's
+// local-only "joined" UI state reset to "Join" on every refresh even for an
+// event the caller (or the host, for their own event) had already joined.
+function toEventSummary(id: string, data: FirebaseFirestore.DocumentData, canSeePrecise: boolean, joined: boolean, pending: boolean): EventSummary {
   const rawLocation = data.location as { area?: unknown; city?: unknown; lat?: unknown; lng?: unknown } | null | undefined;
   const hasLocation = typeof rawLocation === "object" && rawLocation !== null;
   return {
@@ -74,8 +81,38 @@ function toEventSummary(id: string, data: FirebaseFirestore.DocumentData, canSee
     participantCount: data.participantCount ?? 0,
     requiresApproval: data.requiresApproval,
     roomId: data.roomId,
-    createdAt: toIso(data.createdAt)
+    createdAt: toIso(data.createdAt),
+    joined,
+    pending
   };
+}
+
+// Shared by listUpcomingEvents/listNearbyEvents below. Real bug this fixes:
+// this used to only check `participants` (joined y/n), never `joinRequests`
+// — so a caller with an outstanding approval request on an approval-required
+// event had no persisted signal at all once the frontend's own session state
+// was gone (e.g. on refresh), and the Join button silently reverted from
+// "Requested" back to "Join" even though the request was still sitting there.
+// `joinRequests` is only checked when not already a participant — same
+// "only pay for what you need" shape getEvent's viewerStatus already uses.
+async function checkJoinStatus(
+  db: FirebaseFirestore.Firestore,
+  eventId: string,
+  callerUid: string | undefined
+): Promise<{ joined: boolean; pending: boolean }> {
+  if (!callerUid) return { joined: false, pending: false };
+  const eventRef = db.collection("events").doc(eventId);
+  const participantSnap = await eventRef.collection("participants").doc(callerUid).get();
+  if (participantSnap.exists) return { joined: true, pending: false };
+  const requestSnap = await eventRef.collection("joinRequests").doc(callerUid).get();
+  return { joined: false, pending: requestSnap.exists };
+}
+
+// Shared by every UpcomingEvent-shaped list below (upcoming/nearby/hosting)
+// — the Events page card's "Hosted by" line.
+async function getHostDisplayName(db: FirebaseFirestore.Firestore, hostId: string): Promise<string> {
+  const snap = await db.collection("users").doc(hostId).get();
+  return (snap.data()?.displayName as string | undefined) ?? "Unknown";
 }
 
 export interface CreateEventInput {
@@ -185,7 +222,7 @@ export async function createEvent(hostId: string, body: CreateEventInput, option
   }
   await batch.commit();
 
-  return toEventSummary(eventRef.id, eventDoc, true); // the host just created it — always a participant
+  return toEventSummary(eventRef.id, eventDoc, true, true, false); // the host just created it — always a participant, never pending
 }
 
 // GET /events/upcoming — public events browse/upcoming list (schema.md §6's
@@ -193,7 +230,7 @@ export async function createEvent(hostId: string, body: CreateEventInput, option
 // Home's "Upcoming watch events" section, and — with `movieId` given — movie
 // detail's "Watch together" right-rail section (api-contracts.md §8): same
 // query, narrowed to one movie rather than a whole extra endpoint.
-export async function listUpcomingEvents(rawLimit: unknown, rawMovieId?: unknown): Promise<{ items: UpcomingEvent[] }> {
+export async function listUpcomingEvents(rawLimit: unknown, rawMovieId?: unknown, callerUid?: string): Promise<{ items: UpcomingEvent[] }> {
   const db = requireDb();
   const parsedLimit = Number(rawLimit);
   const limit = Number.isFinite(parsedLimit) && parsedLimit > 0 ? Math.min(parsedLimit, MAX_UPCOMING_LIMIT) : DEFAULT_UPCOMING_LIMIT;
@@ -216,13 +253,18 @@ export async function listUpcomingEvents(rawLimit: unknown, rawMovieId?: unknown
       .filter((d) => d.data().deleted !== true)
       .map(async (d) => {
         const data = d.data();
-        const movieSnap = await db.collection("movies").doc(data.movieId).get();
+        const [movieSnap, joinStatus, hostDisplayName] = await Promise.all([
+          db.collection("movies").doc(data.movieId).get(),
+          checkJoinStatus(db, d.id, callerUid),
+          getHostDisplayName(db, data.hostId)
+        ]);
         return {
           // Browse-list — never the exact spot, joined or not (hld.md §9's
           // pre-join privacy rule): area/city is enough to judge interest.
-          ...toEventSummary(d.id, data, false),
+          ...toEventSummary(d.id, data, false, joinStatus.joined, joinStatus.pending),
           movieTitle: movieSnap.data()?.title ?? null,
-          moviePoster: movieSnap.data()?.poster ?? null
+          moviePoster: movieSnap.data()?.poster ?? null,
+          hostDisplayName
         };
       })
   );
@@ -307,7 +349,7 @@ export async function leaveEvent(uid: string, eventId: string): Promise<void> {
 }
 
 // GET /events/:eventId/joinRequests — host-only (hld.md §7's reused §3 ownership check).
-export async function listJoinRequests(uid: string, eventId: string) {
+export async function listJoinRequests(uid: string, eventId: string): Promise<{ items: EventJoinRequest[] }> {
   const db = requireDb();
   const eventSnap = await db.collection("events").doc(eventId).get();
   if (!eventSnap.exists) {
@@ -435,14 +477,19 @@ export async function listNearbyEvents(callerUid: string, rawLat: unknown, rawLn
 
   const items: NearbyEvent[] = await Promise.all(
     candidates.map(async ({ id, data, distanceKm }) => {
-      const movieSnap = await db.collection("movies").doc(data.movieId).get();
+      const [movieSnap, joinStatus, hostDisplayName] = await Promise.all([
+        db.collection("movies").doc(data.movieId).get(),
+        checkJoinStatus(db, id, callerUid),
+        getHostDisplayName(db, data.hostId)
+      ]);
       return {
         // The nearby map (NearbyEventsMap.tsx) needs a real pin for every
         // candidate it plots — left as-is, out of scope for the pre-join
         // area/city-only rule (a separate, larger design question).
-        ...toEventSummary(id, data, true),
+        ...toEventSummary(id, data, true, joinStatus.joined, joinStatus.pending),
         movieTitle: movieSnap.data()?.title ?? null,
         moviePoster: movieSnap.data()?.poster ?? null,
+        hostDisplayName,
         distanceKm: Math.round(distanceKm * 10) / 10
       };
     })
@@ -467,18 +514,158 @@ export async function getEvent(eventId: string, callerUid: string): Promise<Even
     throw new AppError("EVENT_NOT_FOUND", "No such event", 404);
   }
   const data = eventSnap.data()!;
-  const movieSnap = await db.collection("movies").doc(data.movieId).get();
+  const [movieSnap, hostSnap] = await Promise.all([
+    db.collection("movies").doc(data.movieId).get(),
+    db.collection("users").doc(data.hostId).get()
+  ]);
   // The exact meeting spot is only for the host or someone who's actually
   // joined — a signed-in caller who's merely looking at a public event's
   // detail page doesn't get more than the area/city everyone else sees.
   const isHost = data.hostId === callerUid;
   const participantSnap = isHost ? null : await db.collection("events").doc(eventId).collection("participants").doc(callerUid).get();
-  const canSeePrecise = isHost || (participantSnap?.exists ?? false);
+  const isParticipant = isHost || (participantSnap?.exists ?? false);
+  const canSeePrecise = isParticipant;
+
+  // The frontend's Join/Requested/Chat button needs to know the viewer's own
+  // relationship to this event on first render, not just after they click
+  // something — a join-requests read only when it's actually relevant (not
+  // host, not already a participant), same "only pay for what you need"
+  // shape as canSeePrecise above.
+  const requestSnap = !isParticipant ? await db.collection("events").doc(eventId).collection("joinRequests").doc(callerUid).get() : null;
+  const viewerStatus: "host" | "joined" | "pending" | "none" = isHost
+    ? "host"
+    : isParticipant
+      ? "joined"
+      : requestSnap?.exists
+        ? "pending"
+        : "none";
+
   return {
-    ...toEventSummary(eventSnap.id, data, canSeePrecise),
+    ...toEventSummary(eventSnap.id, data, canSeePrecise, isParticipant, viewerStatus === "pending"),
     movieTitle: movieSnap.data()?.title ?? null,
-    moviePoster: movieSnap.data()?.poster ?? null
+    moviePoster: movieSnap.data()?.poster ?? null,
+    hostDisplayName: hostSnap.data()?.displayName ?? "Unknown",
+    viewerStatus
   };
+}
+
+// GET /events/hosting — the Events page's "Hosting" tab. Unlike /events/upcoming
+// (public only, so a host managing a private watch party has nowhere to see
+// it listed), this is scoped to the caller's own hostId regardless of
+// visibility — deliberately the one events list that isn't gated by the
+// privacy-by-not-being-listed rule the rest of this file follows, since the
+// host themself already has full visibility into their own event.
+export async function listHostedEvents(uid: string): Promise<{ items: UpcomingEvent[] }> {
+  const db = requireDb();
+  const [snap, hostDisplayName] = await Promise.all([
+    db.collection("events").where("hostId", "==", uid).where("datetime", ">=", new Date()).orderBy("datetime", "asc").get(),
+    getHostDisplayName(db, uid) // every item's host is the caller — one lookup, not one per event
+  ]);
+
+  const items: UpcomingEvent[] = await Promise.all(
+    snap.docs
+      .filter((d) => d.data().deleted !== true)
+      .map(async (d) => {
+        const data = d.data();
+        const movieSnap = await db.collection("movies").doc(data.movieId).get();
+        return {
+          ...toEventSummary(d.id, data, true, true, false), // the host always sees their own event's exact location, always joined it (host auto-joins on create), never pending
+          hostDisplayName,
+          movieTitle: movieSnap.data()?.title ?? null,
+          moviePoster: movieSnap.data()?.poster ?? null
+        };
+      })
+  );
+
+  return { items };
+}
+
+// Shared by listJoinedEvents/listRequestedEvents below — participants and
+// joinRequests docs don't carry a separate uid field (the doc id already is
+// the uid), same tradeoff/pattern users.service.ts's getReviewCount/
+// getUserReviews use for the identical "find every X across a whole
+// subcollection type" problem. Bounded by the app's total event volume, not
+// the caller's own — fine at this app's current scale, same note as there.
+async function findEventsByCollectionGroup(
+  db: FirebaseFirestore.Firestore,
+  collectionName: "participants" | "joinRequests",
+  callerUid: string
+): Promise<{ id: string; data: FirebaseFirestore.DocumentData }[]> {
+  const snap = await db.collectionGroup(collectionName).get();
+  const mine = snap.docs.filter((d) => d.id === callerUid);
+  const events = await Promise.all(
+    mine.map(async (d) => {
+      const eventId = d.ref.parent.parent!.id;
+      const eventSnap = await db.collection("events").doc(eventId).get();
+      return eventSnap.exists ? { id: eventSnap.id, data: eventSnap.data()! } : null;
+    })
+  );
+  return events.filter((e): e is { id: string; data: FirebaseFirestore.DocumentData } => e !== null && e.data.deleted !== true);
+}
+
+async function toJoinedEventSummary(
+  db: FirebaseFirestore.Firestore,
+  id: string,
+  data: FirebaseFirestore.DocumentData,
+  joined: boolean,
+  pending: boolean
+): Promise<UpcomingEvent> {
+  const [movieSnap, hostDisplayName] = await Promise.all([
+    db.collection("movies").doc(data.movieId).get(),
+    getHostDisplayName(db, data.hostId)
+  ]);
+  return {
+    // A participant sees the exact spot; someone with only a pending
+    // request hasn't joined yet, same pre-join privacy rule as everywhere
+    // else in this file.
+    ...toEventSummary(id, data, joined, joined, pending),
+    movieTitle: movieSnap.data()?.title ?? null,
+    moviePoster: movieSnap.data()?.poster ?? null,
+    hostDisplayName
+  };
+}
+
+// GET /events/joined?when=future|past — Profile page's Events tab, two of
+// its four sections ("Hosting" reuses listHostedEvents above; "Requested"
+// is listRequestedEvents below). Excludes events the caller hosts — hosts
+// auto-join their own event, which would otherwise duplicate the Hosting
+// section here.
+export async function listJoinedEvents(callerUid: string, rawWhen: unknown): Promise<{ items: UpcomingEvent[] }> {
+  if (rawWhen !== "future" && rawWhen !== "past") {
+    throw new AppError("INVALID_QUERY", "when must be 'future' or 'past'", 400);
+  }
+  const db = requireDb();
+  const found = await findEventsByCollectionGroup(db, "participants", callerUid);
+  const now = Date.now();
+
+  const filtered = found
+    .filter(({ data }) => data.hostId !== callerUid)
+    .filter(({ data }) => {
+      const dt = data.datetime;
+      const millis = dt instanceof Date ? dt.getTime() : dt?.toDate?.().getTime();
+      return typeof millis === "number" && (rawWhen === "future" ? millis >= now : millis < now);
+    })
+    .sort((a, b) => {
+      const am = (a.data.datetime instanceof Date ? a.data.datetime : a.data.datetime?.toDate?.())?.getTime() ?? 0;
+      const bm = (b.data.datetime instanceof Date ? b.data.datetime : b.data.datetime?.toDate?.())?.getTime() ?? 0;
+      // Future: soonest first. Past: most recently happened first.
+      return rawWhen === "future" ? am - bm : bm - am;
+    });
+
+  const items = await Promise.all(filtered.map(({ id, data }) => toJoinedEventSummary(db, id, data, true, false)));
+  return { items };
+}
+
+// GET /events/requested — Profile page's Events tab's fourth section.
+// Excludes anything already approved (a joinRequests doc left behind after
+// approval would otherwise double-list it — approveJoinRequest already
+// deletes it, but this stays a real filter rather than trusting that
+// invariant blindly).
+export async function listRequestedEvents(callerUid: string): Promise<{ items: UpcomingEvent[] }> {
+  const db = requireDb();
+  const found = await findEventsByCollectionGroup(db, "joinRequests", callerUid);
+  const items = await Promise.all(found.map(({ id, data }) => toJoinedEventSummary(db, id, data, false, true)));
+  return { items };
 }
 
 // DELETE /events/:eventId — hld.md §21's general edit/delete pattern: author

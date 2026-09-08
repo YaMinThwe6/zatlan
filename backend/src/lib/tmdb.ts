@@ -26,7 +26,9 @@ export interface TmdbMovie {
   isAdult: boolean;
   voteAverage: number;
   voteCount: number;
+  releaseDate: string | null; // TMDB's raw ISO date — movies.service.ts stores this so onboarding's local candidate query can exclude not-yet-released movies
   trailerKey: string | null; // YouTube video id, e.g. https://www.youtube.com/watch?v={trailerKey}
+  backdrop: string | null; // TMDB's raw backdrop_path — widescreen key art for the movie detail hero, distinct from the portrait poster
   streamingProviders: { name: string; type: "subscription" | "rent" | "buy"; logo: string }[];
   credits: TmdbPersonCredit[]; // full person-doc-shape data for everyone in cast/crew above, for upserting people/{personId} (schema.md)
 }
@@ -115,7 +117,9 @@ export async function fetchMovieDetails(tmdbId: string): Promise<TmdbMovie> {
     isAdult: Boolean(data.adult),
     voteAverage: data.vote_average ?? 0,
     voteCount: data.vote_count ?? 0,
+    releaseDate: data.release_date || null,
     trailerKey: pickTrailer(data.videos),
+    backdrop: data.backdrop_path || null,
     streamingProviders: mapProviders(data["watch/providers"]),
     credits: [...creditsById.values()]
   };
@@ -222,7 +226,34 @@ export interface TmdbDiscoverResult extends MovieSummary {
 // that actually keeps growing as the user scrolls, unlike the local Firestore
 // index (only ever populated by movies someone has individually opened).
 export async function discoverMovies(genres: string[], languages: string[], page: number): Promise<{ items: TmdbDiscoverResult[]; totalPages: number }> {
+  // TMDB's with_original_language only accepts one code — no OR syntax like
+  // with_genres' pipe. A single unfiltered request used to sit here instead,
+  // cross-checked in-app afterward — but popularity.desc sorting on an
+  // unfiltered global pool is dominated by English-language content, so a
+  // page could come back with genuinely zero matches for a chosen pair like
+  // Tamil+Malayalam, sometimes for several pages in a row (masked as "slow
+  // loading" by useInfinitePages' auto-continue, and whatever little got
+  // through skewed English). Querying each language's own Discover page
+  // directly and interleaving the results instead guarantees every chosen
+  // language is actually represented, not just whatever survives an
+  // unfiltered global-popularity cut.
+  if (languages.length > 1) {
+    const perLanguage = await Promise.all(languages.map((lang) => discoverMovies(genres, [lang], page)));
+    return {
+      items: interleave(perLanguage.map((r) => r.items)),
+      // Keep offering a next page until every language's own Discover paging
+      // is exhausted, not just whichever language happens to run out first.
+      totalPages: Math.max(...perLanguage.map((r) => r.totalPages))
+    };
+  }
+
   const params = new URLSearchParams({ sort_by: "popularity.desc", page: String(page), include_adult: "false" });
+
+  // Onboarding's "movies you've watched" is meant to offer things someone
+  // could plausibly have already seen — a not-yet-released title showing up
+  // there is a real bug users hit, not just noise. TMDB's own primary_release_date
+  // filter does this server-side so it's exact, not a same-year approximation.
+  params.set("primary_release_date.lte", new Date().toISOString().slice(0, 10));
 
   // TMDB's with_genres treats a comma-separated list as AND (must match
   // every genre listed) and pipe-separated as OR (match any) — confirmed
@@ -235,11 +266,6 @@ export async function discoverMovies(genres: string[], languages: string[], page
   const genreIds = genres.map((g) => GENRE_NAME_TO_ID[g]).filter((id): id is number => id !== undefined);
   if (genreIds.length > 0) params.set("with_genres", genreIds.join("|"));
 
-  // TMDB's discover only accepts a single original_language (no equivalent
-  // OR syntax the way with_genres has). With more than one language chosen,
-  // this is left unfiltered here and cross-checked in-app instead — same
-  // "genre query, language filtered in-app" convention onboarding.service.ts's
-  // local candidate query already uses.
   if (languages.length === 1) params.set("with_original_language", languages[0]);
 
   const data = await tmdbFetch(`/discover/movie?${params.toString()}`);
@@ -253,4 +279,19 @@ export async function discoverMovies(genres: string[], languages: string[], page
     voteAverage: r.vote_average ?? 0
   }));
   return { items, totalPages: data.total_pages ?? 1 };
+}
+
+// Round-robins across each language's own result list rather than
+// concatenating them — concatenating would let whichever language was
+// requested first dominate the front of the merged page (still an implicit
+// bias), especially once one language's list is longer than another's.
+function interleave<T>(lists: T[][]): T[] {
+  const result: T[] = [];
+  const maxLength = Math.max(0, ...lists.map((l) => l.length));
+  for (let i = 0; i < maxLength; i++) {
+    for (const list of lists) {
+      if (i < list.length) result.push(list[i]);
+    }
+  }
+  return result;
 }

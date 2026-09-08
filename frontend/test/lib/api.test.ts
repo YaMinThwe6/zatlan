@@ -5,7 +5,7 @@ vi.mock('../../src/lib/firebase', () => ({
   googleProvider: {}
 }))
 
-const { getMe, updateMe, reportContent } = await import('../../src/lib/api')
+const { getMe, updateMe, reportContent, apiFetch } = await import('../../src/lib/api')
 const mockAuth = (await import('../../src/lib/firebase')).auth as unknown as { currentUser: { getIdToken: () => Promise<string> } | null }
 
 const originalFetch = globalThis.fetch
@@ -54,6 +54,50 @@ describe('getMe', () => {
     }) as unknown as typeof fetch
 
     await expect(getMe()).rejects.toThrow('Firestore is not configured')
+  })
+})
+
+// Real bug this fixes: getUpcomingEvents (homeApi.ts) never opted into
+// `auth: true` at all — every call went out with no Authorization header,
+// so /events/upcoming (backend's optionalAuth route) always treated a
+// signed-in caller as a guest, and joined/pending always came back false.
+// `auth: true` isn't the right fix for that call site (it throws when
+// signed out, and this endpoint is deliberately guest-reachable too) — this
+// new mode attaches the token when there IS a signed-in user, without ever
+// requiring one, mirroring the backend's own optionalAuth middleware.
+describe('apiFetch — optionalAuth', () => {
+  afterEach(() => {
+    mockAuth.currentUser = null
+  })
+
+  it('attaches the Bearer token when signed in', async () => {
+    mockAuth.currentUser = { getIdToken: vi.fn().mockResolvedValue('fake-id-token') } as never
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ success: true, message: 'OK', statusCode: 200, data: { items: [] } })
+    }) as unknown as typeof fetch
+
+    await apiFetch('/events/upcoming', { optionalAuth: true })
+
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      expect.stringContaining('/events/upcoming'),
+      expect.objectContaining({ headers: expect.objectContaining({ Authorization: 'Bearer fake-id-token' }) })
+    )
+  })
+
+  it('sends no Authorization header when signed out, without throwing', async () => {
+    mockAuth.currentUser = null
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ success: true, message: 'OK', statusCode: 200, data: { items: [] } })
+    }) as unknown as typeof fetch
+
+    await expect(apiFetch('/events/upcoming', { optionalAuth: true })).resolves.toEqual({ items: [] })
+
+    const [, init] = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls[0]
+    expect(init.headers.Authorization).toBeUndefined()
   })
 })
 

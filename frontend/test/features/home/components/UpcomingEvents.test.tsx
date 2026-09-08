@@ -80,6 +80,22 @@ describe('UpcomingEvents', () => {
     expect(await screen.findByText('Bandra West, Mumbai')).toBeInTheDocument()
   })
 
+  it('shows Joined immediately on load for an event the backend already reports as joined — real bug: this used to reset to "Join" on every page refresh', async () => {
+    getUpcomingEvents.mockResolvedValue({ items: [{ ...event, joined: true }] })
+    renderWithRouter()
+
+    expect(await screen.findByRole('button', { name: 'Joined' })).toBeDisabled()
+    expect(joinEvent).not.toHaveBeenCalled()
+  })
+
+  it('shows Requested immediately on load for an approval-required event the backend already reports as pending — real bug: this used to reset to "Join" on every page refresh, indistinguishable from never having requested', async () => {
+    getUpcomingEvents.mockResolvedValue({ items: [{ ...event, requiresApproval: true, joined: false, pending: true }] })
+    renderWithRouter()
+
+    expect(await screen.findByRole('button', { name: 'Requested' })).toBeDisabled()
+    expect(joinEvent).not.toHaveBeenCalled()
+  })
+
   it('offers a Chat button once joined, opening the event\'s room', async () => {
     getUpcomingEvents.mockResolvedValue({ items: [event] })
     joinEvent.mockResolvedValue({ status: 'joined' })

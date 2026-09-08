@@ -1,4 +1,4 @@
-import type { MovieStatus, MovieStatusLite } from "@binj/shared-types";
+import type { MovieStatus, MovieStatusLite, MyWatchlistEntry, MyWatchedEntry } from "@binj/shared-types";
 import { requireDb } from "../lib/firebaseAdmin.js";
 import { AppError } from "../utils/AppError.js";
 
@@ -51,7 +51,10 @@ export async function removeFromWatchlist(uid: string, movieId: string): Promise
   await db.collection("users").doc(uid).collection("watchlist").doc(movieId).delete();
 }
 
-export async function listWatchlist(uid: string, rawLimit: unknown, cursor: string | null) {
+// Movie title/poster joined in (one read per item, same tradeoff already
+// accepted on getPublicProfile's watched preview) so the Profile page's
+// Watchlist tab doesn't need a second round-trip per movie.
+export async function listWatchlist(uid: string, rawLimit: unknown, cursor: string | null): Promise<{ items: MyWatchlistEntry[]; nextCursor: string | null }> {
   const db = requireDb();
   const limit = parseLimit(rawLimit);
   const col = db.collection("users").doc(uid).collection("watchlist");
@@ -61,7 +64,17 @@ export async function listWatchlist(uid: string, rawLimit: unknown, cursor: stri
     if (cursorSnap.exists) query = query.startAfter(cursorSnap);
   }
   const snap = await query.get();
-  const items = snap.docs.map((d) => ({ movieId: d.id, addedAt: toIso(d.data().addedAt) }));
+  const items = await Promise.all(
+    snap.docs.map(async (d): Promise<MyWatchlistEntry> => {
+      const movieSnap = await db.collection("movies").doc(d.id).get();
+      return {
+        movieId: d.id,
+        title: movieSnap.data()?.title ?? null,
+        poster: movieSnap.data()?.poster ?? null,
+        addedAt: toIso(d.data().addedAt)
+      };
+    })
+  );
   const nextCursor = snap.docs.length === limit ? snap.docs[snap.docs.length - 1].id : null;
   return { items, nextCursor };
 }
@@ -102,7 +115,9 @@ export async function updateWatchedVisibility(uid: string, movieId: string, visi
   await ref.update({ visibility });
 }
 
-export async function listWatched(uid: string, rawLimit: unknown, cursor: string | null) {
+// Same movie-join tradeoff as listWatchlist above — powers the Profile
+// page's Watched tab.
+export async function listWatched(uid: string, rawLimit: unknown, cursor: string | null): Promise<{ items: MyWatchedEntry[]; nextCursor: string | null }> {
   const db = requireDb();
   const limit = parseLimit(rawLimit);
   const col = db.collection("users").doc(uid).collection("watched");
@@ -112,11 +127,18 @@ export async function listWatched(uid: string, rawLimit: unknown, cursor: string
     if (cursorSnap.exists) query = query.startAfter(cursorSnap);
   }
   const snap = await query.get();
-  const items = snap.docs.map((d) => ({
-    movieId: d.id,
-    watchedAt: toIso(d.data().watchedAt),
-    visibility: d.data().visibility
-  }));
+  const items = await Promise.all(
+    snap.docs.map(async (d): Promise<MyWatchedEntry> => {
+      const movieSnap = await db.collection("movies").doc(d.id).get();
+      return {
+        movieId: d.id,
+        title: movieSnap.data()?.title ?? null,
+        poster: movieSnap.data()?.poster ?? null,
+        watchedAt: toIso(d.data().watchedAt),
+        visibility: d.data().visibility
+      };
+    })
+  );
   const nextCursor = snap.docs.length === limit ? snap.docs[snap.docs.length - 1].id : null;
   return { items, nextCursor };
 }

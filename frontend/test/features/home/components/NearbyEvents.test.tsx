@@ -198,6 +198,24 @@ describe('NearbyEvents', () => {
     expect(props).toMatchObject({ center: { lat: 12.9716, lng: 77.5946 }, items: [event] })
   })
 
+  it('shows Requested immediately on load for an approval-required event the backend already reports as pending — real bug: this used to reset to "Join" on every page refresh', async () => {
+    getNearbyEvents.mockResolvedValue({ items: [{ ...event, requiresApproval: true, joined: false, pending: true }] })
+    Object.defineProperty(navigator, 'geolocation', {
+      configurable: true,
+      value: {
+        getCurrentPosition: (onSuccess: (pos: { coords: { latitude: number; longitude: number } }) => void) => {
+          onSuccess({ coords: { latitude: 12.9716, longitude: 77.5946 } })
+        }
+      }
+    })
+
+    renderWithRouter()
+    fireEvent.click(screen.getByRole('button', { name: /find events near me/i }))
+
+    expect(await screen.findByRole('button', { name: 'Requested' })).toBeDisabled()
+    expect(joinEvent).not.toHaveBeenCalled()
+  })
+
   it('shows an empty-state message when nothing is nearby', async () => {
     getNearbyEvents.mockResolvedValue({ items: [] })
     Object.defineProperty(navigator, 'geolocation', {

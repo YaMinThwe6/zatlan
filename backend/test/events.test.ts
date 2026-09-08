@@ -112,8 +112,35 @@ function makeBatch() {
   return batch;
 }
 
+// Firestore's collectionGroup(id) — every doc across the whole store whose
+// immediate parent collection is named `name`, regardless of depth (mirrors
+// events/{eventId}/participants/{uid} and events/{eventId}/joinRequests/{uid}
+// for listJoinedEvents/listRequestedEvents below). Docs carry
+// `ref.parent.parent.id` — the grandparent doc's id (the event) — same
+// shape a real QueryDocumentSnapshot exposes, matching users.test.ts's own
+// collectionGroup mock for the identical need there.
+function collectionGroupRef(name: string) {
+  const entries = [...store.entries()].filter(([key]) => {
+    const segments = key.split("/");
+    return segments[segments.length - 2] === name;
+  });
+  return {
+    get: async () => ({
+      docs: entries.map(([key, data]) => {
+        const segments = key.split("/");
+        return {
+          id: segments[segments.length - 1],
+          data: () => data,
+          ref: { parent: { parent: { id: segments[segments.length - 3] } } }
+        };
+      })
+    })
+  };
+}
+
 const db = {
   collection: (name: string) => collectionRef(name),
+  collectionGroup: (name: string) => collectionGroupRef(name),
   batch: () => makeBatch(),
   runTransaction: async (fn: (tx: unknown) => Promise<unknown>) => {
     const tx = {
@@ -262,12 +289,69 @@ describe("GET /events/upcoming", () => {
     expect(res.body.data.items[0].movieTitle).toBe("Dune: Part Two");
   });
 
+  it("joins the host's displayName into each item — the Events page card's \"Hosted by\" line", async () => {
+    store.set("users/host-1", { displayName: "Meera" });
+    store.set("events/soon", { hostId: "host-1", movieId: "movie-1", visibility: "public", datetime: new Date("2099-06-01"), participantCount: 1, participantLimit: 5, requiresApproval: false });
+    const app = createApp();
+    const res = await authed(app, "get", "/events/upcoming");
+    expect(res.body.data.items[0].hostDisplayName).toBe("Meera");
+  });
+
   it("is reachable without a token — the guest Discover page's events teaser needs this too", async () => {
     store.set("events/soon", { hostId: "host-1", movieId: "movie-1", visibility: "public", datetime: new Date("2099-06-01"), participantCount: 1, participantLimit: 5, requiresApproval: false });
     const app = createApp();
     const res = await request(app).get("/events/upcoming");
     expect(res.status).toBe(200);
     expect(res.body.data.items).toHaveLength(1);
+  });
+
+  it("reports joined:false for a guest with no token — nothing to check them against", async () => {
+    store.set("events/soon", { hostId: "host-1", movieId: "movie-1", visibility: "public", datetime: new Date("2099-06-01"), participantCount: 1, participantLimit: 5, requiresApproval: false });
+    const app = createApp();
+    const res = await request(app).get("/events/upcoming");
+    expect(res.body.data.items[0].joined).toBe(false);
+  });
+
+  it("reports joined:true for an event the authenticated caller has already joined — real bug: without this, Home's Join button reverts on every refresh even after actually joining", async () => {
+    store.set("events/soon", { hostId: "host-1", movieId: "movie-1", visibility: "public", datetime: new Date("2099-06-01"), participantCount: 2, participantLimit: 5, requiresApproval: false });
+    store.set("events/soon/participants/host-1", { joinedAt: new Date() });
+    const app = createApp(); // currentUid stays "host-1"
+    const res = await authed(app, "get", "/events/upcoming");
+    expect(res.body.data.items[0].joined).toBe(true);
+  });
+
+  it("reports joined:false for an authenticated caller who hasn't joined", async () => {
+    store.set("events/soon", { hostId: "host-1", movieId: "movie-1", visibility: "public", datetime: new Date("2099-06-01"), participantCount: 1, participantLimit: 5, requiresApproval: false });
+    currentUid = "guest-1";
+    const app = createApp();
+    const res = await authed(app, "get", "/events/upcoming");
+    expect(res.body.data.items[0].joined).toBe(false);
+  });
+
+  it("reports pending:false for a guest with no token", async () => {
+    store.set("events/soon", { hostId: "host-1", movieId: "movie-1", visibility: "public", datetime: new Date("2099-06-01"), participantCount: 1, participantLimit: 5, requiresApproval: true });
+    const app = createApp();
+    const res = await request(app).get("/events/upcoming");
+    expect(res.body.data.items[0].pending).toBe(false);
+  });
+
+  it("reports pending:true for an authenticated caller with an outstanding join request — real bug: the Join button reverted to 'Join' on refresh after requesting to join an approval-required event, on both Home and the Events page", async () => {
+    store.set("events/soon", { hostId: "host-1", movieId: "movie-1", visibility: "public", datetime: new Date("2099-06-01"), participantCount: 1, participantLimit: 5, requiresApproval: true });
+    store.set("events/soon/joinRequests/guest-1", { createdAt: new Date() });
+    currentUid = "guest-1";
+    const app = createApp();
+    const res = await authed(app, "get", "/events/upcoming");
+    expect(res.body.data.items[0].joined).toBe(false);
+    expect(res.body.data.items[0].pending).toBe(true);
+  });
+
+  it("reports pending:false once the caller has actually joined, not just requested — a stale joinRequest left behind shouldn't override actual participation", async () => {
+    store.set("events/soon", { hostId: "host-1", movieId: "movie-1", visibility: "public", datetime: new Date("2099-06-01"), participantCount: 2, participantLimit: 5, requiresApproval: true });
+    store.set("events/soon/participants/host-1", { joinedAt: new Date() });
+    const app = createApp(); // currentUid stays "host-1"
+    const res = await authed(app, "get", "/events/upcoming");
+    expect(res.body.data.items[0].joined).toBe(true);
+    expect(res.body.data.items[0].pending).toBe(false);
   });
 
   it("shows area/city but never the exact coordinates, even for the caller who hosts the event", async () => {
@@ -393,6 +477,16 @@ describe("join request approval", () => {
     expect(res.status).toBe(403);
   });
 
+  it("GET joinRequests returns each pending requester's uid and displayName, for the host to approve/deny against", async () => {
+    store.set("events/evt-1", { hostId: "host-1", movieId: "movie-1" });
+    store.set("events/evt-1/joinRequests/guest-1", { createdAt: new Date() });
+    store.set("users/guest-1", { displayName: "Meera" });
+    const app = createApp(); // currentUid stays "host-1"
+    const res = await authed(app, "get", "/events/evt-1/joinRequests");
+    expect(res.status).toBe(200);
+    expect(res.body.data.items).toEqual([{ uid: "guest-1", displayName: "Meera" }]);
+  });
+
   it("approve moves the pending request into participants and increments the count", async () => {
     store.set("events/evt-1", { hostId: "host-1", movieId: "movie-1", participantCount: 1, participantLimit: 5, roomId: "room-1" });
     store.set("events/evt-1/joinRequests/guest-1", { createdAt: new Date() });
@@ -423,6 +517,70 @@ describe("join request approval", () => {
     expect(res.status).toBe(204);
     expect(store.has("events/evt-1/joinRequests/guest-1")).toBe(false);
     expect(store.has("events/evt-1/participants/guest-1")).toBe(false);
+  });
+
+  // Full-stack, one continuous flow through the real HTTP request chain —
+  // create, request, list-for-host, approve, then re-verify from the
+  // requester's side across a *fresh* request the way a page refresh would.
+  // This is the exact real-world scenario reported: join an in-person event
+  // that requires approval, have the host approve it, and confirm the
+  // requester's own status is now correctly "joined" everywhere, not just in
+  // the one response that happened to trigger it.
+  it("end-to-end: request to join → host approves → requester shows joined everywhere, survives a fresh request the way a refresh would", async () => {
+    store.set("users/host-1", { displayName: "Meera" });
+    store.set("users/guest-1", { displayName: "Rohan" });
+
+    const app = createApp();
+
+    // 1. Host creates an in-person, approval-required watch party.
+    currentUid = "host-1";
+    const created = await authed(app, "post", "/events").send({
+      movieId: "movie-1",
+      datetime: "2099-01-01T20:00:00.000Z",
+      mode: "in-person",
+      visibility: "public",
+      participantLimit: 5,
+      requiresApproval: true,
+      location: { area: "Near MG Road", city: "Bangalore", lat: 12.9716, lng: 77.5946 }
+    });
+    expect(created.status).toBe(201);
+    const eventId = created.body.data.eventId;
+    const roomId = created.body.data.roomId;
+
+    // 2. A different user requests to join — gets "pending", not "joined".
+    currentUid = "guest-1";
+    const joinRes = await authed(app, "put", `/events/${eventId}/join`);
+    expect(joinRes.body.data).toEqual({ status: "pending" });
+
+    // 3. Before any approval, the requester's own status is pending
+    // everywhere — both the list view (Home/Events page) and the detail page.
+    const beforeList = await authed(app, "get", "/events/upcoming");
+    expect(beforeList.body.data.items[0]).toMatchObject({ joined: false, pending: true });
+    const beforeDetail = await authed(app, "get", `/events/${eventId}`);
+    expect(beforeDetail.body.data.viewerStatus).toBe("pending");
+
+    // 4. Host sees the pending request listed, with the requester's name.
+    currentUid = "host-1";
+    const requests = await authed(app, "get", `/events/${eventId}/joinRequests`);
+    expect(requests.body.data.items).toEqual([{ uid: "guest-1", displayName: "Rohan" }]);
+
+    // 5. Host approves it.
+    const approveRes = await authed(app, "post", `/events/${eventId}/joinRequests/guest-1/approve`);
+    expect(approveRes.status).toBe(204);
+
+    // 6. The request is gone from the host's list.
+    const requestsAfter = await authed(app, "get", `/events/${eventId}/joinRequests`);
+    expect(requestsAfter.body.data.items).toEqual([]);
+
+    // 7. The requester is now a real participant, room member, and the
+    // event's headcount reflects it — a fresh GET, not the approve response,
+    // proving this is persisted state, not just an in-memory echo.
+    currentUid = "guest-1";
+    const afterList = await authed(app, "get", "/events/upcoming");
+    expect(afterList.body.data.items[0]).toMatchObject({ joined: true, pending: false, participantCount: 2 });
+    const afterDetail = await authed(app, "get", `/events/${eventId}`);
+    expect(afterDetail.body.data.viewerStatus).toBe("joined");
+    expect((store.get(`rooms/${roomId}`) as { memberIds: string[] }).memberIds).toEqual(["host-1", "guest-1"]);
   });
 });
 
@@ -531,6 +689,21 @@ describe("GET /events/nearby", () => {
     expect(res.body.data.items).toEqual([]);
   });
 
+  it("reports pending:true for a caller with an outstanding join request — same real bug as /events/upcoming: the nearby map's Join button also reverted to 'Join' on refresh", async () => {
+    const app = createApp();
+    const created = await authed(app, "post", "/events").send(
+      inPersonBody({ location: { area: "Near MG Road", city: "Bangalore", ...bangaloreNearby }, requiresApproval: true })
+    );
+    const eventId = created.body.data.eventId;
+
+    currentUid = "guest-1";
+    await authed(app, "put", `/events/${eventId}/join`);
+
+    const res = await authed(app, "get", `/events/nearby?lat=${bangalore.lat}&lng=${bangalore.lng}&radiusKm=5`);
+    expect(res.body.data.items[0].joined).toBe(false);
+    expect(res.body.data.items[0].pending).toBe(true);
+  });
+
   it("excludes a private event the caller neither hosts nor was invited to", async () => {
     const app = createApp();
     await authed(app, "post", "/events").send(
@@ -586,6 +759,153 @@ describe("GET /events/nearby", () => {
     const res = await authed(app, "get", `/events/nearby?lat=${bangalore.lat}&lng=${bangalore.lng}&radiusKm=10`);
     expect(res.status).toBe(200);
     expect(res.body.data.items.map((e: { title: string }) => e.title)).toEqual(["Close one", "Far one"]);
+  });
+
+  it("joins the host's displayName into each nearby item too", async () => {
+    store.set("users/host-1", { displayName: "Meera" });
+    const app = createApp();
+    await authed(app, "post", "/events").send(
+      inPersonBody({ location: { area: "Near MG Road", city: "Bangalore", ...bangaloreNearby } })
+    );
+
+    const res = await authed(app, "get", `/events/nearby?lat=${bangalore.lat}&lng=${bangalore.lng}&radiusKm=5`);
+    expect(res.body.data.items[0].hostDisplayName).toBe("Meera");
+  });
+});
+
+describe("GET /events/hosting", () => {
+  it("401s without a token", async () => {
+    const app = createApp();
+    const res = await request(app).get("/events/hosting");
+    expect(res.status).toBe(401);
+  });
+
+  it("returns every future event the caller hosts, public or private, sorted by datetime ascending — unlike /upcoming, a private watch party you're hosting still needs somewhere to manage it", async () => {
+    store.set("events/pub", { hostId: "host-1", movieId: "movie-1", visibility: "public", datetime: new Date("2099-06-01"), participantCount: 1, participantLimit: 5, requiresApproval: false });
+    store.set("events/priv", { hostId: "host-1", movieId: "movie-1", visibility: "private", datetime: new Date("2099-01-01"), participantCount: 1, participantLimit: 5, requiresApproval: false });
+    store.set("events/someone-elses", { hostId: "host-2", movieId: "movie-1", visibility: "public", datetime: new Date("2099-03-01"), participantCount: 1, participantLimit: 5, requiresApproval: false });
+    store.set("events/past", { hostId: "host-1", movieId: "movie-1", visibility: "public", datetime: new Date("2020-01-01"), participantCount: 1, participantLimit: 5, requiresApproval: false });
+
+    const app = createApp(); // currentUid stays "host-1"
+    const res = await authed(app, "get", "/events/hosting");
+    expect(res.status).toBe(200);
+    expect(res.body.data.items.map((e: { eventId: string }) => e.eventId)).toEqual(["priv", "pub"]);
+  });
+
+  it("excludes a soft-deleted event the caller hosts", async () => {
+    store.set("events/evt-1", { hostId: "host-1", movieId: "movie-1", visibility: "public", datetime: new Date("2099-01-01"), deleted: true, participantCount: 1, participantLimit: 5, requiresApproval: false });
+    const app = createApp();
+    const res = await authed(app, "get", "/events/hosting");
+    expect(res.body.data.items).toEqual([]);
+  });
+
+  it("joins the host's own displayName into each item too", async () => {
+    store.set("users/host-1", { displayName: "Meera" });
+    store.set("events/evt-1", { hostId: "host-1", movieId: "movie-1", visibility: "public", datetime: new Date("2099-01-01"), participantCount: 1, participantLimit: 5, requiresApproval: false });
+    const app = createApp();
+    const res = await authed(app, "get", "/events/hosting");
+    expect(res.body.data.items[0].hostDisplayName).toBe("Meera");
+  });
+});
+
+// Profile page's Events tab — two of its four sections (Hosting reuses
+// /events/hosting above; Requested is its own describe block below).
+// Same collectionGroup-scan-filtered-by-doc-id pattern as
+// users.service.ts's getReviewCount/getUserReviews — participants/
+// joinRequests docs don't carry a separate uid field, the doc id already
+// is the uid.
+describe("GET /events/joined", () => {
+  it("401s without a token", async () => {
+    const app = createApp();
+    const res = await request(app).get("/events/joined?when=future");
+    expect(res.status).toBe(401);
+  });
+
+  it("400s on an invalid when value", async () => {
+    const app = createApp();
+    const res = await authed(app, "get", "/events/joined?when=whenever");
+    expect(res.status).toBe(400);
+  });
+
+  it("returns future events the caller has joined, soonest first", async () => {
+    store.set("events/soon", { hostId: "host-2", movieId: "movie-1", visibility: "public", datetime: new Date("2099-06-01"), participantCount: 2, participantLimit: 5, requiresApproval: false, roomId: "room-1" });
+    store.set("events/later", { hostId: "host-2", movieId: "movie-1", visibility: "public", datetime: new Date("2099-12-01"), participantCount: 2, participantLimit: 5, requiresApproval: false, roomId: "room-2" });
+    store.set("events/soon/participants/host-1", { joinedAt: new Date() });
+    store.set("events/later/participants/host-1", { joinedAt: new Date() });
+    const app = createApp(); // currentUid stays "host-1"
+    const res = await authed(app, "get", "/events/joined?when=future");
+    expect(res.status).toBe(200);
+    expect(res.body.data.items.map((e: { eventId: string }) => e.eventId)).toEqual(["soon", "later"]);
+    expect(res.body.data.items[0]).toMatchObject({ joined: true, pending: false });
+  });
+
+  it("returns past events the caller has joined, most recent first", async () => {
+    store.set("events/older", { hostId: "host-2", movieId: "movie-1", visibility: "public", datetime: new Date("2020-01-01"), participantCount: 2, participantLimit: 5, requiresApproval: false, roomId: "room-1" });
+    store.set("events/recent", { hostId: "host-2", movieId: "movie-1", visibility: "public", datetime: new Date("2021-01-01"), participantCount: 2, participantLimit: 5, requiresApproval: false, roomId: "room-2" });
+    store.set("events/older/participants/host-1", { joinedAt: new Date() });
+    store.set("events/recent/participants/host-1", { joinedAt: new Date() });
+    const app = createApp();
+    const res = await authed(app, "get", "/events/joined?when=past");
+    expect(res.body.data.items.map((e: { eventId: string }) => e.eventId)).toEqual(["recent", "older"]);
+  });
+
+  it("excludes events the caller hosts — that's the separate Hosting section", async () => {
+    store.set("events/own", { hostId: "host-1", movieId: "movie-1", visibility: "public", datetime: new Date("2099-06-01"), participantCount: 1, participantLimit: 5, requiresApproval: false });
+    store.set("events/own/participants/host-1", { joinedAt: new Date() });
+    const app = createApp();
+    const res = await authed(app, "get", "/events/joined?when=future");
+    expect(res.body.data.items).toEqual([]);
+  });
+
+  it("excludes a soft-deleted event", async () => {
+    store.set("events/evt-1", { hostId: "host-2", movieId: "movie-1", visibility: "public", datetime: new Date("2099-06-01"), deleted: true, participantCount: 1, participantLimit: 5, requiresApproval: false });
+    store.set("events/evt-1/participants/host-1", { joinedAt: new Date() });
+    const app = createApp();
+    const res = await authed(app, "get", "/events/joined?when=future");
+    expect(res.body.data.items).toEqual([]);
+  });
+
+  it("joins movie and host details into each item", async () => {
+    store.set("users/host-2", { displayName: "Meera" });
+    store.set("events/evt-1", { hostId: "host-2", movieId: "movie-1", visibility: "public", datetime: new Date("2099-06-01"), participantCount: 2, participantLimit: 5, requiresApproval: false });
+    store.set("events/evt-1/participants/host-1", { joinedAt: new Date() });
+    const app = createApp();
+    const res = await authed(app, "get", "/events/joined?when=future");
+    expect(res.body.data.items[0]).toMatchObject({ movieTitle: "Dune: Part Two", hostDisplayName: "Meera" });
+  });
+});
+
+describe("GET /events/requested", () => {
+  it("401s without a token", async () => {
+    const app = createApp();
+    const res = await request(app).get("/events/requested");
+    expect(res.status).toBe(401);
+  });
+
+  it("returns events the caller has an outstanding join request on", async () => {
+    store.set("events/evt-1", { hostId: "host-2", movieId: "movie-1", visibility: "public", datetime: new Date("2099-06-01"), participantCount: 1, participantLimit: 5, requiresApproval: true });
+    store.set("events/evt-1/joinRequests/host-1", { createdAt: new Date() });
+    const app = createApp();
+    const res = await authed(app, "get", "/events/requested");
+    expect(res.status).toBe(200);
+    expect(res.body.data.items.map((e: { eventId: string }) => e.eventId)).toEqual(["evt-1"]);
+    expect(res.body.data.items[0]).toMatchObject({ joined: false, pending: true });
+  });
+
+  it("excludes a request that's already been approved (participant now, no longer just a request)", async () => {
+    store.set("events/evt-1", { hostId: "host-2", movieId: "movie-1", visibility: "public", datetime: new Date("2099-06-01"), participantCount: 2, participantLimit: 5, requiresApproval: true });
+    store.set("events/evt-1/participants/host-1", { joinedAt: new Date() });
+    const app = createApp();
+    const res = await authed(app, "get", "/events/requested");
+    expect(res.body.data.items).toEqual([]);
+  });
+
+  it("excludes a soft-deleted event", async () => {
+    store.set("events/evt-1", { hostId: "host-2", movieId: "movie-1", visibility: "public", datetime: new Date("2099-06-01"), deleted: true, participantCount: 1, participantLimit: 5, requiresApproval: true });
+    store.set("events/evt-1/joinRequests/host-1", { createdAt: new Date() });
+    const app = createApp();
+    const res = await authed(app, "get", "/events/requested");
+    expect(res.body.data.items).toEqual([]);
   });
 });
 
@@ -682,6 +1002,39 @@ describe("GET /events/:eventId", () => {
     const app = createApp();
     const res = await authed(app, "get", "/events/evt-1");
     expect(res.body.data.preciseLocation).toEqual({ lat: 12.9716, lng: 77.5946 });
+  });
+
+  it("reports viewerStatus: 'host' for the event's own host", async () => {
+    store.set("events/evt-1", { hostId: "host-1", movieId: "movie-1", visibility: "public", participantCount: 1, participantLimit: 5, requiresApproval: false });
+    const app = createApp(); // currentUid stays "host-1"
+    const res = await authed(app, "get", "/events/evt-1");
+    expect(res.body.data.viewerStatus).toBe("host");
+  });
+
+  it("reports viewerStatus: 'joined' for a participant who isn't the host", async () => {
+    store.set("events/evt-1", { hostId: "host-1", movieId: "movie-1", visibility: "public", participantCount: 2, participantLimit: 5, requiresApproval: false });
+    store.set("events/evt-1/participants/guest-1", { joinedAt: new Date() });
+    currentUid = "guest-1";
+    const app = createApp();
+    const res = await authed(app, "get", "/events/evt-1");
+    expect(res.body.data.viewerStatus).toBe("joined");
+  });
+
+  it("reports viewerStatus: 'pending' for someone with an outstanding join request", async () => {
+    store.set("events/evt-1", { hostId: "host-1", movieId: "movie-1", visibility: "public", participantCount: 1, participantLimit: 5, requiresApproval: true });
+    store.set("events/evt-1/joinRequests/guest-1", { createdAt: new Date() });
+    currentUid = "guest-1";
+    const app = createApp();
+    const res = await authed(app, "get", "/events/evt-1");
+    expect(res.body.data.viewerStatus).toBe("pending");
+  });
+
+  it("reports viewerStatus: 'none' for a stranger who hasn't joined or requested", async () => {
+    store.set("events/evt-1", { hostId: "host-1", movieId: "movie-1", visibility: "public", participantCount: 1, participantLimit: 5, requiresApproval: false });
+    currentUid = "stranger-1";
+    const app = createApp();
+    const res = await authed(app, "get", "/events/evt-1");
+    expect(res.body.data.viewerStatus).toBe("none");
   });
 });
 

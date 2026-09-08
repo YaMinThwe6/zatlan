@@ -2,13 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { getUpcomingEvents, joinEvent, type UpcomingEvent } from '../services/homeApi'
 import { posterUrl } from '../../../lib/images'
-
-function formatDate(iso: string | null): string {
-  if (!iso) return ''
-  const d = new Date(iso)
-  return d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' }) +
-    ' · ' + d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
-}
+import { formatEventDate as formatDate } from '../../../lib/eventDate'
 
 export function UpcomingEvents() {
   const navigate = useNavigate()
@@ -56,7 +50,14 @@ export function UpcomingEvents() {
       {items.length === 0 && <p className="text-sm text-text-muted">No public events coming up yet — be the first to host one.</p>}
       <ul className="flex flex-col gap-3">
         {items.map((event) => {
-          const status = joinStatus[event.eventId]
+          // joinStatus only ever records a change made THIS session (via
+          // handleJoin) — event.joined/event.pending are the real, persisted
+          // answer from the backend, so they're the fallback rather than
+          // always starting "un-joined" until clicked. Without this, the
+          // button reverted to "Join" on every refresh — even for an event
+          // already joined (or one's own hosted event, always auto-joined),
+          // or for an approval-required event with a request still pending.
+          const status = joinStatus[event.eventId] ?? (event.joined ? 'joined' : event.pending ? 'pending' : undefined)
           const poster = posterUrl(event.moviePoster)
           return (
             <li key={event.eventId} className="flex items-center gap-3 rounded-2xl border border-border-soft bg-surface p-3">

@@ -25,6 +25,7 @@ const me = {
   notificationPrefs: { emailEnabled: true },
   themePreference: 'dark' as const,
   accentTheme: 'emerald' as const,
+  hideFromDiscovery: false,
   isNewUser: false
 }
 
@@ -39,6 +40,7 @@ function renderWithRouter(onSignOut = vi.fn(), meProp?: typeof me) {
       <Routes>
         <Route path="/" element={<AppHeader onSignOut={onSignOut} me={meProp} />} />
         <Route path="/search" element={<p>Search page</p>} />
+        <Route path="/profile/:uid" element={<p>Profile page</p>} />
       </Routes>
     </MemoryRouter>
   )
@@ -70,6 +72,15 @@ describe('AppHeader', () => {
 
     fireEvent.click(await screen.findByText(/search movies, people, genres/i))
     expect(await screen.findByText('Search page')).toBeInTheDocument()
+  })
+
+  it("navigates to the caller's own profile when their avatar/name is clicked — the sidebar's Profile row was removed, this is the replacement entry point", async () => {
+    getMe.mockResolvedValue(me)
+    getNotifications.mockResolvedValue({ items: [] })
+    renderWithRouter()
+
+    fireEvent.click(await screen.findByRole('button', { name: /arjun/i }))
+    expect(await screen.findByText('Profile page')).toBeInTheDocument()
   })
 
   it('calls onSignOut when Sign out is clicked', async () => {

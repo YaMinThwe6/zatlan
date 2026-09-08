@@ -19,8 +19,11 @@ import {
 import { WatchedByFriends } from './WatchedByFriends'
 import { SimilarPicks } from './SimilarPicks'
 import { WatchTogether } from './WatchTogether'
+import { WatchTogetherGuest } from './WatchTogetherGuest'
+import { CreateEventModal } from '../../events/components/CreateEventModal'
 import { useAuth } from '../../../lib/AuthContext'
-import { posterUrl } from '../../../lib/images'
+import { posterUrl, backdropUrl } from '../../../lib/images'
+import { TrailerEmbed } from './TrailerEmbed'
 import { Sidebar } from '../../../components/Sidebar'
 import { AppHeader } from '../../../components/AppHeader'
 
@@ -71,6 +74,10 @@ export function MovieDetail() {
   const [status, setStatus] = useState<MovieStatus>(EMPTY_STATUS)
   const [statusError, setStatusError] = useState('')
   const [actionError, setActionError] = useState('')
+  // WatchedByFriends' empty-state "invite a friend" CTA — opens the same
+  // create-a-watch-party flow WatchTogether's own button does, pre-filled
+  // with this movie.
+  const [createPartyOpen, setCreatePartyOpen] = useState(false)
 
   const [reviews, setReviews] = useState<Review[]>([])
   const [reviewsError, setReviewsError] = useState('')
@@ -185,6 +192,7 @@ export function MovieDetail() {
 
   const binjAverage = movie.binjRating.count > 0 ? (movie.binjRating.sum / movie.binjRating.count).toFixed(1) : null
   const poster = posterUrl(movie.poster, 'w500')
+  const backdrop = backdropUrl(movie.backdrop, 'w1280')
 
   const actionBar = isGuest ? (
     <div className="px-5 pt-5 lg:px-0 lg:pt-0">
@@ -279,12 +287,15 @@ export function MovieDetail() {
         </button>
 
         {/* Poster + title glass card, overlapping the hero on mobile; a
-            plain two-column row on desktop. */}
+            plain two-column row on desktop, with a third widescreen backdrop
+            column filling the space that otherwise sat empty next to a
+            narrower title block (desktop only — there's no room for it
+            alongside the mobile overlap layout). */}
         <div className="relative mx-5 -mt-14 flex items-end gap-3.5 rounded-[20px] border border-white/10 bg-surface/55 p-4 shadow-[0_14px_34px_rgba(0,0,0,0.4)] backdrop-blur-xl lg:mx-0 lg:mt-0 lg:items-stretch lg:gap-6 lg:rounded-none lg:border-none lg:bg-transparent lg:p-0 lg:shadow-none lg:backdrop-blur-none">
           <div className="h-36 w-[100px] flex-none overflow-hidden rounded-xl bg-surface-alt shadow-[0_6px_16px_rgba(0,0,0,0.4)] lg:h-80 lg:w-55 lg:rounded-2xl">
-            {poster && <img src={poster} alt="" className="poster h-full w-full object-cover" />}
+            <TrailerEmbed trailerKey={movie.trailerKey} posterUrl={poster} className="h-full w-full" />
           </div>
-          <div className="min-w-0 flex-1 pb-0.5 lg:flex lg:flex-col lg:justify-end lg:pb-1.5">
+          <div className="min-w-0 flex-1 pb-0.5 lg:flex lg:w-80 lg:flex-none lg:flex-col lg:justify-end lg:pb-1.5">
             <h1 className="font-serif text-[21px] leading-tight font-semibold text-white lg:text-[38px]">{movie.title}</h1>
             <p className="mt-1.5 mb-2.5 text-[11.5px] text-text-secondary lg:mt-2 lg:mb-4 lg:text-sm">
               {movie.year} · {movie.genres.join(', ')} · {formatRuntime(movie.runtime)}
@@ -311,6 +322,11 @@ export function MovieDetail() {
             </div>
             <div className="hidden lg:block">{actionBar}</div>
           </div>
+          {backdrop && (
+            <div className="hidden overflow-hidden rounded-2xl bg-surface-alt lg:block lg:h-80 lg:flex-1">
+              <img src={backdrop} alt="" className="h-full w-full object-cover" />
+            </div>
+          )}
         </div>
 
         {statusError && (
@@ -357,7 +373,17 @@ export function MovieDetail() {
           <div className="flex flex-col gap-7 lg:flex-row lg:gap-8">
             {!isGuest && (
               <section className="lg:flex-1">
-                <WatchedByFriends movieId={movieId} />
+                <WatchedByFriends
+                  movieId={movieId}
+                  watched={status.watched}
+                  onMarkWatched={() => toggle('watched')}
+                  onInviteFriend={() => setCreatePartyOpen(true)}
+                />
+              </section>
+            )}
+            {isGuest && (
+              <section className="lg:flex-1">
+                <WatchTogetherGuest movieId={movieId} />
               </section>
             )}
             <section className="lg:flex-1">
@@ -519,6 +545,16 @@ export function MovieDetail() {
         <AppHeader onSignOut={() => void signOutUser()} />
         <div className="lg:min-h-0 lg:flex-1 lg:overflow-y-auto">{content}</div>
       </main>
+      {createPartyOpen && movie && (
+        <CreateEventModal
+          initialMovie={{ movieId: movie.movieId, title: movie.title, poster: movie.poster, year: movie.year }}
+          onClose={() => setCreatePartyOpen(false)}
+          onCreated={(eventId) => {
+            setCreatePartyOpen(false)
+            navigate(`/events/${eventId}`)
+          }}
+        />
+      )}
     </div>
   )
 }

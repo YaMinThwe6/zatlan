@@ -20,11 +20,45 @@ export interface PersonSummary {
 // GET /users/me/tasteMatches item — relationship is joined live against the
 // Follow collections (api-contracts.md §4) so a "Connect" button can render
 // the right state without a second round-trip.
+//
+// matchReason records which tier of the ranking pipeline surfaced this
+// candidate (precomputed watch-history overlap, live genre/language overlap,
+// or the guaranteed catch-all) — lets the UI say *why* someone is suggested
+// for free, no extra query.
 export interface TasteMatch {
   uid: string
   displayName: string
+  photoURL: string | null
   score: number
   relationship: 'following' | 'pending' | 'none'
+  matchReason: 'tasteMatch' | 'genreOverlap' | 'languageOverlap' | 'suggested'
+  // Added for the People Discovery page's richer card (Home's rail widget
+  // still only shows a compact version) — up to a couple of these render as
+  // tags, and followerCount as light social proof, same field
+  // TopFollowedPerson already uses on the signed-out Discover teaser.
+  favoriteGenres: string[]
+  followerCount: number
+}
+
+// GET /discover/people item — the signed-out Discover page's "People you
+// might vibe with" teaser (movie/DiscoverPeopleTeaser.tsx). Public, so no
+// `relationship`/`score`/`matchReason` the way TasteMatch has — there's no
+// caller to compute those against yet. Deliberately real users (not
+// fabricated sample data), ranked by real followerCount.
+export interface TopFollowedPerson {
+  uid: string
+  displayName: string
+  photoURL: string | null
+  followerCount: number
+}
+
+// GET /users/me/followRequests item — Settings' Privacy section, shown when
+// "Approve followers manually" is on. One row per person awaiting approval,
+// for the caller's own Approve/Deny actions.
+export interface FollowRequest {
+  uid: string
+  displayName: string
+  photoURL: string | null
 }
 
 // GET /movies/:movieId/watchedBy item — hld.md §5a. Scoped to the caller's

@@ -147,13 +147,16 @@ describe("Watchlist", () => {
     expect(store.has("users/uid-1/watchlist/movie-1")).toBe(false);
   });
 
-  it("GET returns items newest-first with a nextCursor when the page is full", async () => {
+  it("GET returns items newest-first with a nextCursor when the page is full, movie title/poster already joined in", async () => {
+    store.set("movies/movie-2", { title: "Interstellar", poster: "/interstellar.jpg", genres: [], likeCount: 0 });
     store.set("users/uid-1/watchlist/movie-1", { addedAt: new Date("2026-01-01") });
     store.set("users/uid-1/watchlist/movie-2", { addedAt: new Date("2026-01-02") });
     const app = createApp();
     const res = await authed(app, "get", "/users/me/watchlist?limit=1");
     expect(res.status).toBe(200);
-    expect(res.body.data.items).toEqual([{ movieId: "movie-2", addedAt: "2026-01-02T00:00:00.000Z" }]);
+    expect(res.body.data.items).toEqual([
+      { movieId: "movie-2", title: "Interstellar", poster: "/interstellar.jpg", addedAt: "2026-01-02T00:00:00.000Z" }
+    ]);
     expect(res.body.data.nextCursor).toBe("movie-2");
   });
 });
@@ -210,6 +213,19 @@ describe("Watched", () => {
       .set("Authorization", "Bearer good")
       .send({ visibility: "sorta" });
     expect(res.status).toBe(400);
+  });
+
+  it("GET returns items newest-first with a nextCursor when the page is full, movie title/poster already joined in — powers the Profile page's Watched tab", async () => {
+    store.set("movies/movie-2", { title: "Interstellar", poster: "/interstellar.jpg", genres: [], likeCount: 0 });
+    store.set("users/uid-1/watched/movie-1", { watchedAt: new Date("2026-01-01"), visibility: "public" });
+    store.set("users/uid-1/watched/movie-2", { watchedAt: new Date("2026-01-02"), visibility: "private" });
+    const app = createApp();
+    const res = await authed(app, "get", "/users/me/watched?limit=1");
+    expect(res.status).toBe(200);
+    expect(res.body.data.items).toEqual([
+      { movieId: "movie-2", title: "Interstellar", poster: "/interstellar.jpg", watchedAt: "2026-01-02T00:00:00.000Z", visibility: "private" }
+    ]);
+    expect(res.body.data.nextCursor).toBe("movie-2");
   });
 });
 

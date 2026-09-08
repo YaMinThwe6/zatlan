@@ -51,3 +51,19 @@ export interface MovieStatusLite {
 export interface MovieStatusMap {
   items: Record<string, MovieStatusLite>
 }
+
+// GET /users/:uid/reviews item — Profile page's Reviews tab. Reviews live at
+// movies/{movieId}/reviews/{uid}, not under the user themselves, so this is
+// a movie-keyed aggregation rather than movie.ts's per-movie Review — movie
+// title/poster joined in the same way MyWatchedEntry/MyWatchlistEntry are.
+// No authorId/displayName here (unlike Review above): this is always
+// unambiguously the profile owner's own review, by construction.
+export interface ProfileReviewEntry {
+  movieId: string
+  movieTitle: string | null
+  moviePoster: string | null
+  rating: number
+  reviewText: string | null
+  isAnonymous: boolean
+  createdAt: string | null
+}

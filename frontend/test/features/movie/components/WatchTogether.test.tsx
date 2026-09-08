@@ -68,6 +68,22 @@ describe('WatchTogether', () => {
     expect(await screen.findByRole('button', { name: /chat/i })).toBeInTheDocument()
   })
 
+  it('shows Joined immediately on load for an event the backend already reports as joined — real bug: this reverted to "Join" on every page refresh, missed when the same bug was fixed on Home/Events', async () => {
+    getUpcomingEvents.mockResolvedValue({ items: [{ ...events[0], joined: true, pending: false }] })
+    renderWithRouter()
+
+    expect(await screen.findByRole('button', { name: /chat/i })).toBeInTheDocument()
+    expect(joinEvent).not.toHaveBeenCalled()
+  })
+
+  it('shows Requested immediately on load for an approval-required event the backend already reports as pending — real bug: this reverted to "Join" on every page refresh, missed when the same bug was fixed on Home/Events', async () => {
+    getUpcomingEvents.mockResolvedValue({ items: [{ ...events[0], requiresApproval: true, joined: false, pending: true }] })
+    renderWithRouter()
+
+    expect(await screen.findByRole('button', { name: 'Requested' })).toBeDisabled()
+    expect(joinEvent).not.toHaveBeenCalled()
+  })
+
   it('opens the create-event form when the CTA is clicked', async () => {
     getUpcomingEvents.mockResolvedValue({ items: [] })
     renderWithRouter()

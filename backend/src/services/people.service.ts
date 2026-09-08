@@ -1,4 +1,4 @@
-import type { TasteMatch, WatchedByEntry, PersonSummary } from "@binj/shared-types";
+import type { TasteMatch, WatchedByEntry, PersonSummary, TopFollowedPerson } from "@binj/shared-types";
 import { requireDb } from "../lib/firebaseAdmin.js";
 import { AppError } from "../utils/AppError.js";
 import { significantWords } from "../lib/searchIndex.js";
@@ -6,37 +6,231 @@ import { rankCandidate } from "../lib/searchRanking.js";
 
 const MAX_QUERY_WORDS = 30; // Firestore's array-contains-any cap — same as movies.service.ts's search
 const RESULTS_TOP_N = 20;
+const MAX_ARRAY_CONTAINS_ANY = 10; // Firestore's cap, same convention as onboarding.service.ts
+export const COLD_START_MATCH_LIMIT = 10; // default page size for GET /users/me/tasteMatches, exported for the controller's ?limit= default
+const SUGGESTED_POOL_LIMIT = 30; // fan-out bound for the suggested-tier candidate pool, same convention as MAX_FOLLOWING_FOR_WATCHED_BY below
+const TOP_FOLLOWED_POOL_LIMIT = 30; // same fan-out-bound convention as SUGGESTED_POOL_LIMIT
+const TOP_FOLLOWED_LIMIT = 5; // GET /discover/people's response size — the signed-out teaser only ever shows a handful
 
 function toIso(value: FirebaseFirestore.Timestamp | Date | null): string | null {
   if (!value) return null;
   return value instanceof Date ? value.toISOString() : value.toDate().toISOString();
 }
 
-// GET /users/me/tasteMatches — api-contracts.md §5, hld.md §5b.
-// Read-only: precomputed by scripts/computeTasteMatches.ts (or the future
-// cron+BigQuery pipeline it stands in for) — no write endpoint here.
-export async function getTasteMatches(uid: string): Promise<{ items: TasteMatch[] }> {
-  const db = requireDb();
-  const snap = await db.collection("users").doc(uid).collection("tasteMatches").orderBy("score", "desc").get();
+async function getRelationship(db: FirebaseFirestore.Firestore, callerUid: string, targetUid: string): Promise<TasteMatch["relationship"]> {
+  const [followingSnap, requestSnap] = await Promise.all([
+    db.collection("users").doc(callerUid).collection("following").doc(targetUid).get(),
+    db.collection("users").doc(targetUid).collection("followRequests").doc(callerUid).get()
+  ]);
+  return followingSnap.exists ? "following" : requestSnap.exists ? "pending" : "none";
+}
+
+// Shared by every TasteMatch-producing tier below — the People Discovery
+// card's follower-count line.
+async function getFollowerCount(db: FirebaseFirestore.Firestore, uid: string): Promise<number> {
+  const snap = await db.collection("users").doc(uid).collection("followers").get();
+  return snap.docs.length;
+}
+
+// Shared by every fallback tier below: overlap on an array field the caller
+// picked at onboarding (favoriteGenres or preferredLanguages). Both are live,
+// unlike the precomputed tasteMatches tier, so they're cheap fallbacks rather
+// than the primary signal.
+async function getArrayOverlapMatches(
+  db: FirebaseFirestore.Firestore,
+  uid: string,
+  field: "favoriteGenres" | "preferredLanguages",
+  matchReason: "genreOverlap" | "languageOverlap"
+): Promise<TasteMatch[]> {
+  const callerSnap = await db.collection("users").doc(uid).get();
+  const callerValues = ((callerSnap.data()?.[field] as string[] | null) ?? []).slice(0, MAX_ARRAY_CONTAINS_ANY);
+  if (callerValues.length === 0) return [];
+
+  const candidatesSnap = await db.collection("users").where(field, "array-contains-any", callerValues).get();
 
   const items = await Promise.all(
-    snap.docs.map(async (matchDoc): Promise<TasteMatch> => {
-      const [userSnap, followingSnap, requestSnap] = await Promise.all([
-        db.collection("users").doc(matchDoc.id).get(),
-        db.collection("users").doc(uid).collection("following").doc(matchDoc.id).get(),
-        db.collection("users").doc(matchDoc.id).collection("followRequests").doc(uid).get()
-      ]);
-      const relationship = followingSnap.exists ? "following" : requestSnap.exists ? "pending" : "none";
+    candidatesSnap.docs
+      .filter((d) => d.id !== uid)
+      .map(async (d): Promise<TasteMatch> => {
+        const data = d.data();
+        const values = (data[field] as string[] | null) ?? [];
+        const overlap = values.filter((v) => callerValues.includes(v)).length;
+        const [relationship, followerCount] = await Promise.all([getRelationship(db, uid, d.id), getFollowerCount(db, d.id)]);
+        return {
+          uid: d.id,
+          displayName: data.displayName ?? "Unknown",
+          photoURL: (data.photoURL as string | null) ?? null,
+          score: Math.round((overlap / callerValues.length) * 100),
+          relationship,
+          matchReason,
+          favoriteGenres: (data.favoriteGenres as string[] | null) ?? [],
+          followerCount
+        };
+      })
+  );
+
+  return items.sort((a, b) => b.score - a.score);
+}
+
+// Cold start for GET /users/me/tasteMatches below: scripts/computeTasteMatches.ts
+// only ever scores a pair of users after both have enough watch history for a
+// real comparison, so a brand-new (or otherwise thin-history) user has no
+// precomputed docs at all — without this, the section has nothing to show and
+// disappears completely rather than genuinely having no matches. Onboarding's
+// favoriteGenres pick is the one signal guaranteed to exist immediately, so
+// this stands in with a live genre-overlap score until real matches land.
+function getGenreOverlapMatches(db: FirebaseFirestore.Firestore, uid: string): Promise<TasteMatch[]> {
+  return getArrayOverlapMatches(db, uid, "favoriteGenres", "genreOverlap");
+}
+
+// Second live fallback, tried after genre-overlap: preferredLanguages is the
+// other signal collected at onboarding and otherwise unused for matching.
+function getLanguageOverlapMatches(db: FirebaseFirestore.Firestore, uid: string): Promise<TasteMatch[]> {
+  return getArrayOverlapMatches(db, uid, "preferredLanguages", "languageOverlap");
+}
+
+async function getBlockedUids(db: FirebaseFirestore.Firestore, uid: string): Promise<Set<string>> {
+  const snap = await db.collection("users").doc(uid).collection("blocked").get();
+  return new Set(snap.docs.map((d) => d.id));
+}
+
+// Guaranteed catch-all tier: fires whenever the earlier tiers (precomputed
+// taste, genre overlap, language overlap) haven't filled the requested limit
+// — including a caller with zero signal of any kind (skipped onboarding
+// picks, no watch history, no precomputed matches). Blends how recently a
+// candidate joined with how many followers they have, so the list is never
+// empty as long as at least one other (non-blocked) user exists.
+async function getSuggestedMatches(db: FirebaseFirestore.Firestore, uid: string): Promise<TasteMatch[]> {
+  const [snap, blocked] = await Promise.all([db.collection("users").orderBy("createdAt", "desc").get(), getBlockedUids(db, uid)]);
+  const pool = snap.docs.filter((d) => d.id !== uid && !blocked.has(d.id)).slice(0, SUGGESTED_POOL_LIMIT);
+  if (pool.length === 0) return [];
+
+  const followerCounts = await Promise.all(
+    pool.map((d) =>
+      db
+        .collection("users")
+        .doc(d.id)
+        .collection("followers")
+        .get()
+        .then((s) => s.docs.length)
+    )
+  );
+  const maxFollowers = Math.max(...followerCounts);
+  const poolSize = pool.length;
+
+  const items = await Promise.all(
+    pool.map(async (d, index): Promise<TasteMatch> => {
+      const data = d.data();
+      const recencyNorm = poolSize > 1 ? (poolSize - 1 - index) / (poolSize - 1) : 1;
+      const followerNorm = maxFollowers > 0 ? followerCounts[index] / maxFollowers : 0;
+      const combined = followerNorm * 0.5 + recencyNorm * 0.5;
       return {
-        uid: matchDoc.id,
-        displayName: userSnap.data()?.displayName ?? "Unknown",
-        score: matchDoc.data().score,
-        relationship
+        uid: d.id,
+        displayName: (data.displayName as string) ?? "Unknown",
+        photoURL: (data.photoURL as string | null) ?? null,
+        score: Math.round(combined * 100),
+        relationship: await getRelationship(db, uid, d.id),
+        matchReason: "suggested",
+        favoriteGenres: (data.favoriteGenres as string[] | null) ?? [],
+        followerCount: followerCounts[index] // already fetched above for the recency+follower score itself
       };
     })
   );
 
-  return { items };
+  return items.sort((a, b) => b.score - a.score);
+}
+
+// GET /discover/people — the signed-out Discover page's "People you might
+// vibe with" teaser (movie/DiscoverPeopleTeaser.tsx). Public: no caller uid
+// to match against, so this can't reuse getTasteMatches' pipeline — instead
+// it's real users ranked by real followerCount, same "gate, don't fabricate"
+// choice PeopleYouMightVibeWith already makes for signed-in users. Anyone
+// with zero followers is excluded rather than shown with "0" — real social
+// proof or nothing, never a number that undercuts the point of showing this
+// at all. Anyone with hideFromDiscovery set (Settings' opt-out) is excluded
+// outright, regardless of follower count — being featured here is opt-out,
+// not just unlisted-by-omission the way privacy elsewhere in this file works.
+// Bounded fan-out like getSuggestedMatches above; revisit with a
+// denormalized followerCount field before this needs to scale past that —
+// every anonymous visitor to Discover hits this, unlike the authenticated
+// endpoints elsewhere in this file.
+export async function getTopFollowedPeople(): Promise<{ items: TopFollowedPerson[] }> {
+  const db = requireDb();
+  const snap = await db.collection("users").orderBy("createdAt", "desc").get();
+  const pool = snap.docs.filter((d) => d.data().hideFromDiscovery !== true).slice(0, TOP_FOLLOWED_POOL_LIMIT);
+  if (pool.length === 0) return { items: [] };
+
+  const items = await Promise.all(
+    pool.map(async (d): Promise<TopFollowedPerson> => {
+      const followersSnap = await db.collection("users").doc(d.id).collection("followers").get();
+      const data = d.data();
+      return {
+        uid: d.id,
+        displayName: (data.displayName as string) ?? "Unknown",
+        photoURL: (data.photoURL as string | null) ?? null,
+        followerCount: followersSnap.docs.length
+      };
+    })
+  );
+
+  return {
+    items: items
+      .filter((p) => p.followerCount > 0)
+      .sort((a, b) => b.followerCount - a.followerCount)
+      .slice(0, TOP_FOLLOWED_LIMIT)
+  };
+}
+
+// GET /users/me/tasteMatches — api-contracts.md §5, hld.md §5b.
+// One ranking pipeline shared by the Home widget (default, small limit) and
+// the People Discovery page (larger explicit limit): precomputed taste
+// matches first, then live genre overlap, then live language overlap, then
+// the guaranteed suggested (recency+followers) catch-all — each tier only
+// runs if the previous ones haven't already filled `limit`, and a candidate
+// already picked up by an earlier (more specific) tier is never repeated by
+// a later one. No write endpoint here either way.
+export async function getTasteMatches(uid: string, limit: number = COLD_START_MATCH_LIMIT): Promise<{ items: TasteMatch[] }> {
+  const db = requireDb();
+  const seen = new Set<string>();
+  const results: TasteMatch[] = [];
+
+  function addTier(candidates: TasteMatch[]): void {
+    for (const candidate of candidates) {
+      if (results.length >= limit) return;
+      if (seen.has(candidate.uid)) continue;
+      seen.add(candidate.uid);
+      results.push(candidate);
+    }
+  }
+
+  const tasteSnap = await db.collection("users").doc(uid).collection("tasteMatches").orderBy("score", "desc").get();
+  const tasteMatches = await Promise.all(
+    tasteSnap.docs.map(async (matchDoc): Promise<TasteMatch> => {
+      const [targetSnap, relationship, followerCount] = await Promise.all([
+        db.collection("users").doc(matchDoc.id).get(),
+        getRelationship(db, uid, matchDoc.id),
+        getFollowerCount(db, matchDoc.id)
+      ]);
+      const data = targetSnap.data();
+      return {
+        uid: matchDoc.id,
+        displayName: (data?.displayName as string) ?? "Unknown",
+        photoURL: (data?.photoURL as string | null) ?? null,
+        score: matchDoc.data().score,
+        relationship,
+        matchReason: "tasteMatch",
+        favoriteGenres: (data?.favoriteGenres as string[] | null) ?? [],
+        followerCount
+      };
+    })
+  );
+  addTier(tasteMatches);
+
+  if (results.length < limit) addTier(await getGenreOverlapMatches(db, uid));
+  if (results.length < limit) addTier(await getLanguageOverlapMatches(db, uid));
+  if (results.length < limit) addTier(await getSuggestedMatches(db, uid));
+
+  return { items: results };
 }
 
 // ---------------------------------------------------------------------------

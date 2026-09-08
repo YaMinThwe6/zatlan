@@ -10,7 +10,15 @@ const checkUsernameAvailable = vi.fn()
 vi.mock('../../../../src/features/onboarding/services/onboardingApi', () => ({ checkUsernameAvailable }))
 
 const getNotifications = vi.fn().mockResolvedValue({ items: [] })
-vi.mock('../../../../src/features/home/services/homeApi', () => ({ getNotifications }))
+const getFollowRequests = vi.fn().mockResolvedValue({ items: [] })
+const approveFollowRequest = vi.fn()
+const denyFollowRequest = vi.fn()
+vi.mock('../../../../src/features/home/services/homeApi', () => ({
+  getNotifications,
+  getFollowRequests,
+  approveFollowRequest,
+  denyFollowRequest
+}))
 
 const signOutUser = vi.fn()
 // Mutable so individual tests can simulate the OTP/custom-token sign-in path
@@ -45,6 +53,7 @@ const baseMe = {
   notificationPrefs: { emailEnabled: true },
   themePreference: 'dark' as const,
   accentTheme: 'emerald' as const,
+  hideFromDiscovery: false,
   isNewUser: false
 }
 
@@ -53,6 +62,9 @@ afterEach(() => {
   checkUsernameAvailable.mockReset()
   getMe.mockClear()
   getNotifications.mockClear()
+  getFollowRequests.mockClear().mockResolvedValue({ items: [] })
+  approveFollowRequest.mockClear()
+  denyFollowRequest.mockClear()
   signOutUser.mockReset()
   authProviderData = [{ providerId: 'google.com' }]
 })
@@ -76,7 +88,11 @@ describe('Settings', () => {
     renderSettings()
 
     expect(screen.getByText('BINJ')).toBeInTheDocument() // Sidebar's own logo mark
-    await waitFor(() => expect(getMe).toHaveBeenCalled()) // AppHeader/Sidebar fetching their own `me`
+    // Settings supplies `me` directly to AppHeader (no independent fetch, see
+    // AppHeader's own comment on that), and Sidebar has no self-fetch of its
+    // own at all — so the signal this shell actually rendered is the
+    // identity bar's content, not a getMe() call.
+    await waitFor(() => expect(screen.getByText('Ananya Rao')).toBeInTheDocument())
     const sidebar = within(document.querySelector('aside')!)
     const settingsRow = sidebar.getByText('Settings').closest('button')
     expect(settingsRow?.querySelector('span')).toHaveClass('text-accent')
@@ -191,6 +207,74 @@ describe('Settings', () => {
     fireEvent.click(screen.getByRole('switch', { name: /approve followers manually/i }))
 
     await waitFor(() => expect(updateMe).toHaveBeenCalledWith({ followRequiresApproval: true }))
+    await waitFor(() => expect(onUpdateMe).toHaveBeenCalledWith(updated))
+  })
+
+  describe('Follow requests', () => {
+    // Real gap this closes: the backend has always had GET/approve/deny
+    // follow-request endpoints, but nothing in the frontend ever called any
+    // of them — a user with "Approve followers manually" on had no way to
+    // see or act on a pending request anywhere in the UI.
+    it('fetches and shows each pending request, with Approve/Deny, when "Approve followers manually" is on', async () => {
+      getFollowRequests.mockResolvedValue({ items: [{ uid: 'req-1', displayName: 'Rohan', photoURL: null }] })
+      renderSettings({ ...baseMe, followRequiresApproval: true })
+
+      await waitFor(() => expect(getFollowRequests).toHaveBeenCalled())
+      expect(await screen.findByText('Rohan')).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Approve' })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Deny' })).toBeInTheDocument()
+    })
+
+    it('does not fetch follow requests when "Approve followers manually" is off', async () => {
+      renderSettings({ ...baseMe, followRequiresApproval: false })
+
+      await waitFor(() => expect(screen.getByDisplayValue('Ananya Rao')).toBeInTheDocument())
+      expect(getFollowRequests).not.toHaveBeenCalled()
+    })
+
+    it('clicking Approve calls approveFollowRequest and removes that request from the list', async () => {
+      getFollowRequests.mockResolvedValue({ items: [{ uid: 'req-1', displayName: 'Rohan', photoURL: null }] })
+      approveFollowRequest.mockResolvedValue(undefined)
+      renderSettings({ ...baseMe, followRequiresApproval: true })
+
+      await screen.findByText('Rohan')
+      fireEvent.click(screen.getByRole('button', { name: 'Approve' }))
+
+      await waitFor(() => expect(approveFollowRequest).toHaveBeenCalledWith('req-1'))
+      await waitFor(() => expect(screen.queryByText('Rohan')).not.toBeInTheDocument())
+    })
+
+    it('clicking Deny calls denyFollowRequest and removes that request from the list', async () => {
+      getFollowRequests.mockResolvedValue({ items: [{ uid: 'req-1', displayName: 'Rohan', photoURL: null }] })
+      denyFollowRequest.mockResolvedValue(undefined)
+      renderSettings({ ...baseMe, followRequiresApproval: true })
+
+      await screen.findByText('Rohan')
+      fireEvent.click(screen.getByRole('button', { name: 'Deny' }))
+
+      await waitFor(() => expect(denyFollowRequest).toHaveBeenCalledWith('req-1'))
+      await waitFor(() => expect(screen.queryByText('Rohan')).not.toBeInTheDocument())
+    })
+
+    it('shows a friendly message instead of nothing when there are no pending requests', async () => {
+      getFollowRequests.mockResolvedValue({ items: [] })
+      renderSettings({ ...baseMe, followRequiresApproval: true })
+
+      expect(await screen.findByText(/no pending requests/i)).toBeInTheDocument()
+    })
+  })
+
+  it('toggles "Hide me from public Discover suggestions"', async () => {
+    const updated = { ...baseMe, hideFromDiscovery: true }
+    updateMe.mockResolvedValue(updated)
+    const { onUpdateMe } = renderSettings()
+
+    const toggle = screen.getByRole('switch', { name: /hide me from public discover suggestions/i })
+    expect(toggle).toHaveAttribute('aria-checked', 'false')
+    fireEvent.click(toggle)
+
+    expect(onUpdateMe).toHaveBeenCalledWith(expect.objectContaining({ hideFromDiscovery: true })) // optimistic
+    await waitFor(() => expect(updateMe).toHaveBeenCalledWith({ hideFromDiscovery: true }))
     await waitFor(() => expect(onUpdateMe).toHaveBeenCalledWith(updated))
   })
 

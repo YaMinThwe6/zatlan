@@ -70,6 +70,27 @@ describe('WatchedStep', () => {
     expect(unlikeMovie).toHaveBeenCalledWith('m1')
   })
 
+  it('ignores a second click on the same movie while the first toggle is still in flight — real bug: rapid double-clicks raced two conflicting request pairs and could leave the checkmark disagreeing with the backend', async () => {
+    getWatchedCandidates.mockResolvedValue({ items: candidates })
+    let resolveMark!: () => void
+    markWatched.mockReturnValue(new Promise<void>((resolve) => { resolveMark = resolve }))
+    likeMovie.mockResolvedValue(undefined)
+    render(<WatchedStep genres={[]} languages={[]} onContinue={vi.fn()} onSkip={vi.fn()} />)
+
+    await waitFor(() => expect(screen.getAllByText(/Movie One/).length).toBeGreaterThan(0))
+    fireEvent.click(screen.getAllByText(/Movie One/)[0])
+    await waitFor(() => expect(markWatched).toHaveBeenCalledTimes(1))
+
+    // Second click on the same movie while markWatched('m1') is still
+    // pending — must be ignored, not fire an overlapping unmark/unlike pair.
+    fireEvent.click(screen.getAllByText(/Movie One/)[0])
+    expect(unmarkWatched).not.toHaveBeenCalled()
+    expect(markWatched).toHaveBeenCalledTimes(1)
+
+    resolveMark()
+    await waitFor(() => expect(screen.getAllByText('1 selected').length).toBeGreaterThan(0))
+  })
+
   it('rolls back the toggle when markWatched fails', async () => {
     getWatchedCandidates.mockResolvedValue({ items: candidates })
     markWatched.mockRejectedValue(new Error('nope'))

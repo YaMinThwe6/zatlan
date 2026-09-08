@@ -41,3 +41,28 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
     return Responder.error(res, "UNAUTHENTICATED", "Invalid or expired token", 401);
   }
 }
+
+/**
+ * For routes that must stay reachable by a signed-out guest (GET /events/upcoming
+ * — the Discover page's events teaser) but still want to know who's asking when
+ * someone IS signed in (Home's own call to the same endpoint, to report each
+ * event's `joined` status correctly). Unlike requireAuth, a missing or invalid
+ * token never 401s here — it just proceeds without `req.uid`, same as a guest.
+ */
+export async function optionalAuth(req: Request, _res: Response, next: NextFunction) {
+  if (!auth) return next();
+
+  const header = req.header("Authorization") ?? "";
+  const [scheme, token] = header.split(" ");
+  if (scheme !== "Bearer" || !token) return next();
+
+  try {
+    const decoded = await auth.verifyIdToken(token);
+    req.uid = decoded.uid;
+    req.authClaims = decoded;
+  } catch {
+    // Invalid/expired token on an optional-auth route — proceed as a guest
+    // rather than 401, since a token isn't required here in the first place.
+  }
+  next();
+}

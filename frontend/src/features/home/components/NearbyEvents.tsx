@@ -4,15 +4,9 @@ import { getNearbyEvents, joinEvent, type NearbyEvent } from '../services/homeAp
 import { NearbyEventsMap } from './NearbyEventsMap'
 import { mapsConfigured } from '../../../lib/maps'
 import { posterUrl } from '../../../lib/images'
+import { formatEventDate as formatDate } from '../../../lib/eventDate'
 
 const DEFAULT_RADIUS_KM = 25
-
-function formatDate(iso: string | null): string {
-  if (!iso) return ''
-  const d = new Date(iso)
-  return d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' }) +
-    ' · ' + d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
-}
 
 type Status = 'idle' | 'locating' | 'loading' | 'loaded' | 'denied' | 'error'
 
@@ -96,7 +90,12 @@ export function NearbyEvents() {
       {status === 'loaded' && items.length > 0 && (
         <ul className="flex flex-col gap-3">
           {items.map((event) => {
-            const joined = joinStatus[event.eventId]
+            // See UpcomingEvents.tsx's identical comment — joinStatus only
+            // records a change made this session; event.joined/event.pending
+            // are the real, persisted answer, so they're the fallback
+            // instead of always starting "un-joined" (which reverted the
+            // button on refresh, including a still-pending approval request).
+            const joined = joinStatus[event.eventId] ?? (event.joined ? 'joined' : event.pending ? 'pending' : undefined)
             const poster = posterUrl(event.moviePoster)
             return (
               <li key={event.eventId} className="flex items-center gap-3 rounded-2xl border border-border-soft bg-surface p-3">

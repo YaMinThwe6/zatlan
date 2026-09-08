@@ -112,6 +112,10 @@ beforeEach(() => {
   store.set("movies/parasite", { title: "Parasite", genres: ["Thriller", "Drama"], originalLanguage: "ko", voteAverage: 8.5 });
   store.set("movies/oldboy", { title: "Oldboy", genres: ["Thriller"], originalLanguage: "ko", voteAverage: 8.1 });
   store.set("movies/notebook", { title: "The Notebook", genres: ["Romance"], originalLanguage: "en", voteAverage: 7.8 });
+  // Highest voteAverage of all fixtures on purpose — if the not-yet-released
+  // filter isn't applied, it sorts to the very top of every unfiltered query
+  // below and breaks their expected ordering, not just the dedicated test.
+  store.set("movies/upcoming", { title: "Future Blockbuster", genres: ["Sci-Fi"], originalLanguage: "en", voteAverage: 9.9, releaseDate: "2099-01-01" });
 });
 
 function req(app: ReturnType<typeof createApp>, qs = "") {
@@ -152,12 +156,39 @@ describe("GET /onboarding/watched-candidates", () => {
     expect(res.body.data.items.map((m: { movieId: string }) => m.movieId)).toEqual(["parasite", "oldboy"]);
   });
 
-  it("combines genres and languages (genre query, language filtered in-app)", async () => {
+  it("combines genres and languages (language query, genre filtered in-app)", async () => {
     const app = createApp();
     const res = await req(app, "?genres=Drama&languages=ko");
     expect(res.status).toBe(200);
     // Drama movies are interstellar(en) and parasite(ko) — only parasite matches both
     expect(res.body.data.items.map((m: { movieId: string }) => m.movieId)).toEqual(["parasite"]);
+  });
+
+  // Real reported bug: someone who picks a narrow language (e.g. only Tamil)
+  // alongside a genre used to get nothing, even when the local index has a
+  // real match — because the query filtered by genre FIRST (top CANDIDATE_LIMIT
+  // by voteAverage), and the local index skews English (whatever's been
+  // searched/opened most), so the one Tamil match never made it into that
+  // top-voted slice for the language filter to even see. Querying by language
+  // first instead guarantees the pool is language-correct before genre ever
+  // narrows it further.
+  it("finds a language match even when it would've been truncated out of a genre-first top-voted pool", async () => {
+    for (let i = 0; i < 30; i++) {
+      store.set(`movies/decoy${i}`, { title: `Decoy ${i}`, genres: ["Sci-Fi"], originalLanguage: "en", voteAverage: 9.0 });
+    }
+    store.set("movies/enthiran", { title: "Enthiran", genres: ["Sci-Fi"], originalLanguage: "ta", voteAverage: 7.0 });
+
+    const app = createApp();
+    const res = await req(app, "?genres=Sci-Fi&languages=ta");
+
+    expect(res.body.data.items.map((m: { movieId: string }) => m.movieId)).toContain("enthiran");
+  });
+
+  it("excludes locally-cached movies whose releaseDate is still in the future, even though it has the top voteAverage", async () => {
+    const app = createApp();
+    const res = await req(app);
+    expect(res.status).toBe(200);
+    expect(res.body.data.items.map((m: { movieId: string }) => m.movieId)).not.toContain("upcoming");
   });
 
   it("page 1 (no cursor) always offers a next page for scrolling further", async () => {
@@ -221,12 +252,9 @@ describe("GET /onboarding/watched-candidates", () => {
     expect(res.body.data.nextCursor).toBeNull();
   });
 
-  it("cross-checks multiple chosen languages in-app, since TMDB Discover only takes one", async () => {
+  it("passes cursor pages straight through from discoverMovies without re-filtering by language — discoverMovies now guarantees language-correctness itself (fans out per language internally)", async () => {
     discoverMovies.mockResolvedValueOnce({
-      items: [
-        { movieId: "1", title: "English Movie", poster: null, year: 2020, genres: [], originalLanguage: "en", voteAverage: 5 },
-        { movieId: "2", title: "Korean Movie", poster: null, year: 2020, genres: [], originalLanguage: "ko", voteAverage: 5 }
-      ],
+      items: [{ movieId: "2", title: "Korean Movie", poster: null, year: 2020, genres: [], originalLanguage: "ko", voteAverage: 5 }],
       totalPages: 1
     });
 

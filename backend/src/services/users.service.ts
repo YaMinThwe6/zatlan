@@ -1,4 +1,4 @@
-import type { UserProfile, PublicProfile, ProfileGenreStat, ActivityItem } from "@binj/shared-types";
+import type { UserProfile, PublicProfile, ProfileGenreStat, ActivityItem, ProfileReviewEntry } from "@binj/shared-types";
 import { requireDb } from "../lib/firebaseAdmin.js";
 import { AppError } from "../utils/AppError.js";
 
@@ -21,6 +21,11 @@ interface UserDoc {
   notificationPrefs: { emailEnabled: boolean };
   themePreference: "dark" | "light" | "system";
   accentTheme: "emerald" | "cyan" | "purple" | "pink" | "amber" | "red";
+  // Settings' opt-out of GET /discover/people (people.service.ts's
+  // getTopFollowedPeople) — the signed-out Discover page's "top followed
+  // users" teaser. Distinct from listVisible (gates the watched list, not
+  // whether a user's name/photo gets surfaced to anonymous visitors at all).
+  hideFromDiscovery: boolean;
 }
 
 interface Claims {
@@ -57,7 +62,8 @@ function buildDefaultUserDoc(uid: string, claims: Claims): UserDoc {
     onboardingComplete: false,
     notificationPrefs: { emailEnabled: true },
     themePreference: "dark",
-    accentTheme: "emerald"
+    accentTheme: "emerald",
+    hideFromDiscovery: false
   };
 }
 
@@ -109,6 +115,7 @@ const SIMPLE_PATCHABLE_FIELDS = [
   "onboardingComplete",
   "themePreference",
   "accentTheme",
+  "hideFromDiscovery",
   // Settings' "Email me about activity" toggle (frontend/src/features/settings) —
   // notificationPrefs existed on UserProfile/UserDoc since onboarding, but PATCH
   // never accepted it. Same plain pass-through as every other field here; no
@@ -231,6 +238,42 @@ async function computeTopGenres(
 async function getReviewCount(db: FirebaseFirestore.Firestore, targetUid: string): Promise<number> {
   const snap = await db.collectionGroup("reviews").get();
   return snap.docs.filter((d) => d.id === targetUid && d.data().deleted !== true).length;
+}
+
+// GET /users/:uid/reviews — Profile page's Reviews tab. Same collectionGroup
+// scan + filter-by-doc-id approach as getReviewCount above, just returning
+// the reviews themselves (with movie title/poster joined in) instead of a
+// count. `ref.parent.parent.id` is the review's movie — a synchronous
+// property read on a real QueryDocumentSnapshot, not a network call.
+// Anonymous reviews are only included when the caller IS the target (self
+// always sees their own, even ones marked anonymous elsewhere) — showing an
+// anonymous review on someone else's Reviews tab would defeat the entire
+// point of marking it anonymous.
+export async function getUserReviews(callerUid: string, targetUid: string): Promise<{ items: ProfileReviewEntry[] }> {
+  const db = requireDb();
+  const isSelf = callerUid === targetUid;
+  const snap = await db.collectionGroup("reviews").get();
+  const mine = snap.docs.filter((d) => d.id === targetUid && d.data().deleted !== true && (isSelf || !d.data().isAnonymous));
+
+  const items = await Promise.all(
+    mine.map(async (d): Promise<ProfileReviewEntry> => {
+      const movieId = d.ref.parent.parent!.id;
+      const movieSnap = await db.collection("movies").doc(movieId).get();
+      const data = d.data();
+      return {
+        movieId,
+        movieTitle: movieSnap.data()?.title ?? null,
+        moviePoster: movieSnap.data()?.poster ?? null,
+        rating: data.rating as number,
+        reviewText: (data.reviewText as string | null) ?? null,
+        isAnonymous: Boolean(data.isAnonymous),
+        createdAt: toIso((data.createdAt as FirebaseFirestore.Timestamp | Date | undefined) ?? null)
+      };
+    })
+  );
+
+  items.sort((a, b) => new Date(b.createdAt ?? 0).getTime() - new Date(a.createdAt ?? 0).getTime());
+  return { items };
 }
 
 // Overview tab's "Recent Activity" — reuses home.service.ts's own `activity`

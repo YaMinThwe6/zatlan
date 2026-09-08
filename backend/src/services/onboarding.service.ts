@@ -102,7 +102,11 @@ export async function getWatchedCandidates(
 
   if (cursor !== null) {
     const { items: discovered, totalPages } = await discoverMovies(genres, languages, cursor);
-    let items: MovieCandidate[] = discovered.map((d) => ({
+    // discoverMovies() (tmdb.ts) already guarantees language-correctness
+    // itself now — it fans out one request per language and interleaves when
+    // more than one is chosen, rather than a single unfiltered request this
+    // used to have to cross-check in-app afterward.
+    const items: MovieCandidate[] = discovered.map((d) => ({
       movieId: d.movieId,
       title: d.title,
       poster: d.poster,
@@ -112,31 +116,32 @@ export async function getWatchedCandidates(
       voteAverage: d.voteAverage
     }));
 
-    // TMDB's with_original_language only accepts a single code (discoverMovies
-    // skips it entirely when more than one language was chosen) — cross-check
-    // the full set here instead, same "genre query, language filtered in-app"
-    // convention the local candidate query below already uses.
-    if (languages.length > 1) {
-      items = items.filter((m) => languages.includes(m.originalLanguage as string));
-    }
-
     backfillInBackground(discovered.map((d) => d.movieId));
     return { items, nextCursor: cursor < totalPages ? String(cursor + 1) : null };
   }
 
   const db = requireDb();
   let candidates: FirebaseFirestore.QuerySnapshot;
-  if (genres.length > 0) {
-    candidates = await db
-      .collection("movies")
-      .where("genres", "array-contains-any", genres)
-      .orderBy("voteAverage", "desc")
-      .limit(CANDIDATE_LIMIT)
-      .get();
-  } else if (languages.length > 0) {
+  // Language-primary when a language preference exists, even alongside a
+  // genre pick — real reported bug: the local "movies" collection skews
+  // toward whatever's been searched/opened most (in practice, English), so a
+  // genre-first query's top-CANDIDATE_LIMIT-by-voteAverage slice can easily
+  // contain zero matches for a narrower language like Tamil, even when the
+  // collection has plenty — just not within that slice. Filtering by
+  // language in Firestore itself (an exact `in` query, not a post-hoc in-app
+  // check) guarantees the pool is language-correct before genre ever narrows
+  // it further.
+  if (languages.length > 0) {
     candidates = await db
       .collection("movies")
       .where("originalLanguage", "in", languages)
+      .orderBy("voteAverage", "desc")
+      .limit(CANDIDATE_LIMIT)
+      .get();
+  } else if (genres.length > 0) {
+    candidates = await db
+      .collection("movies")
+      .where("genres", "array-contains-any", genres)
       .orderBy("voteAverage", "desc")
       .limit(CANDIDATE_LIMIT)
       .get();
@@ -144,24 +149,40 @@ export async function getWatchedCandidates(
     candidates = await db.collection("movies").orderBy("voteAverage", "desc").limit(CANDIDATE_LIMIT).get();
   }
 
-  let items: MovieCandidate[] = candidates.docs.map((d) => {
-    const data = d.data();
-    return {
-      movieId: d.id,
-      title: data.title,
-      poster: data.poster ?? null,
-      year: data.year ?? null,
-      genres: data.genres ?? [],
-      originalLanguage: data.originalLanguage ?? null,
-      voteAverage: data.voteAverage ?? 0
-    };
-  });
+  // Discover-backed cursor pages above filter unreleased movies out via
+  // primary_release_date.lte (tmdb.ts) — this local index has no live TMDB
+  // call to lean on, so it needs its own check against the releaseDate
+  // movies.service.ts stores on every full-detail fetch. A doc with no
+  // releaseDate at all is one only ever seeded by the lightweight search-index
+  // path (never full-detail-fetched) rather than actually unreleased, so it's
+  // let through rather than excluded on missing data.
+  const now = Date.now();
+  function isReleased(data: FirebaseFirestore.DocumentData): boolean {
+    if (typeof data.releaseDate !== "string") return true;
+    const parsed = Date.parse(data.releaseDate);
+    return Number.isNaN(parsed) || parsed <= now;
+  }
 
-  // When both genres and languages were given, the language filter is applied
-  // in-app on top of the genre query — Firestore can't combine array-contains-any
-  // with an `in` filter on a different field in one query.
+  let items: MovieCandidate[] = candidates.docs
+    .filter((d) => isReleased(d.data()))
+    .map((d) => {
+      const data = d.data();
+      return {
+        movieId: d.id,
+        title: data.title,
+        poster: data.poster ?? null,
+        year: data.year ?? null,
+        genres: data.genres ?? [],
+        originalLanguage: data.originalLanguage ?? null,
+        voteAverage: data.voteAverage ?? 0
+      };
+    });
+
+  // When both were given, the genre filter is applied in-app on top of the
+  // language-primary query above — Firestore can't combine an `in` filter
+  // with array-contains-any on a different field in one query.
   if (genres.length > 0 && languages.length > 0) {
-    items = items.filter((m) => languages.includes(m.originalLanguage as string));
+    items = items.filter((m) => (m.genres as string[]).some((g) => genres.includes(g)));
   }
 
   // Always offer to keep scrolling: /discover/movie works fine unfiltered too

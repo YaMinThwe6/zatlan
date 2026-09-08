@@ -92,10 +92,15 @@ export function AppHeader({ onSignOut, me: meProp }: Props) {
             </span>
           )}
         </button>
-        <div className="flex h-9 w-9 items-center justify-center rounded-full border border-[rgba(var(--accent-rgb),0.35)] bg-[rgba(var(--accent-rgb),0.16)] text-[13px] font-bold text-accent">
-          {initial}
-        </div>
-        <span className="text-[13px] font-semibold text-text">{me.displayName}</span>
+        {/* Replaces Sidebar's old "Profile" nav row — the avatar/name here
+            already showed who's signed in, so this is the entry point to
+            their own profile now instead of a separate nav item. */}
+        <button type="button" onClick={() => navigate(`/profile/${me.uid}`)} className="flex items-center gap-2.5">
+          <div className="flex h-9 w-9 items-center justify-center rounded-full border border-[rgba(var(--accent-rgb),0.35)] bg-[rgba(var(--accent-rgb),0.16)] text-[13px] font-bold text-accent">
+            {initial}
+          </div>
+          <span className="text-[13px] font-semibold text-text">{me.displayName}</span>
+        </button>
         <button type="button" onClick={onSignOut} className="text-[12.5px] font-semibold text-text-muted">
           Sign out
         </button>

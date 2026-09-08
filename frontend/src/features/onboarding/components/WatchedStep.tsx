@@ -63,6 +63,17 @@ export function WatchedStep({ genres, languages, initialWatched, onContinue, onS
     () => new Map((initialWatched ?? []).map((m) => [m.movieId, m]))
   )
 
+  // Guards toggle() against a rapid second click on the same movie before its
+  // first mark/unmark request pair has resolved — real bug: without this, the
+  // second click reads the just-optimistically-updated state and fires the
+  // OPPOSITE request pair, racing the first with no ordering guarantee. Which
+  // pair the server processes last decides the real backend state, but the UI
+  // only reflects whichever toggle() call's own promise settles last — not
+  // necessarily the same one — so the checkmark could end up disagreeing with
+  // what's actually saved. Only reproduced on a fast double-click/tap on the
+  // same card, hence "sometimes, rarely, not always".
+  const [pendingIds, setPendingIds] = useState<Set<string>>(new Set())
+
   useEffect(() => {
     if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current)
     const trimmed = query.trim()
@@ -87,7 +98,10 @@ export function WatchedStep({ genres, languages, initialWatched, onContinue, onS
 
   async function toggle(movie: MovieCandidate | MovieSummary) {
     const full = toCandidate(movie)
+    if (pendingIds.has(full.movieId)) return // a toggle for this movie is already in flight — ignore the extra click rather than race it
+
     const wasWatched = watchedMovies.has(full.movieId)
+    setPendingIds((prev) => new Set(prev).add(full.movieId))
     setWatchedMovies((prev) => {
       const next = new Map(prev)
       if (wasWatched) next.delete(full.movieId)
@@ -109,6 +123,12 @@ export function WatchedStep({ genres, languages, initialWatched, onContinue, onS
         return next
       })
       setError(err instanceof Error ? err.message : 'Failed to update')
+    } finally {
+      setPendingIds((prev) => {
+        const next = new Set(prev)
+        next.delete(full.movieId)
+        return next
+      })
     }
   }
 
@@ -168,14 +188,17 @@ export function WatchedStep({ genres, languages, initialWatched, onContinue, onS
         <ul className="grid grid-cols-3 gap-3">
           {displayed.map((movie) => {
             const isWatched = watchedMovies.has(movie.movieId)
+            const isPending = pendingIds.has(movie.movieId)
             const poster = posterUrl(movie.poster)
             return (
               <li key={movie.movieId}>
                 <button
                   type="button"
                   aria-pressed={isWatched}
+                  aria-busy={isPending}
+                  disabled={isPending}
                   onClick={() => toggle(movie)}
-                  className="block w-full text-left"
+                  className={`block w-full text-left ${isPending ? 'opacity-60' : ''}`}
                 >
                   <div
                     className={`relative aspect-[2/3] w-full overflow-hidden rounded-[10px] bg-surface-alt ${isWatched ? 'border-2 border-accent' : 'border border-border'}`}

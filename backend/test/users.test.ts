@@ -85,13 +85,28 @@ function makeCollectionRef(path: string) {
 
 // Firestore's collectionGroup(id) — every doc across the whole store whose
 // immediate parent collection is named `name`, regardless of depth (mirrors
-// movies/{movieId}/reviews/{uid} for users.service.ts's review-count read).
+// movies/{movieId}/reviews/{uid} for users.service.ts's review-count read
+// and listUserReviews below). Docs carry `ref.parent.parent.id` — the
+// grandparent doc's id (e.g. the movie a review belongs to) — same shape
+// listUserReviews reads off a real QueryDocumentSnapshot; getReviewCount
+// never needed more than `id`/`data()`, so this was never exercised until now.
 function makeCollectionGroupRef(name: string) {
   const entries = [...store.entries()].filter(([key]) => {
     const segments = key.split("/");
     return segments[segments.length - 2] === name;
   }) as Entry[];
-  return makeQuery(entries);
+  return {
+    get: async () => ({
+      docs: entries.map(([key, data]) => {
+        const segments = key.split("/");
+        return {
+          id: segments[segments.length - 1],
+          data: () => data,
+          ref: { parent: { parent: { id: segments[segments.length - 3] } } }
+        };
+      })
+    })
+  };
 }
 
 const db = {
@@ -681,5 +696,74 @@ describe("GET /users/:uid", () => {
 
     expect(res.status).toBe(200);
     expect(res.body.data.tasteMatchScore).toBeNull();
+  });
+});
+
+// Profile page's Reviews tab. Reviews live at movies/{movieId}/reviews/{uid}
+// (reviews.service.ts), not under the user themselves — same collectionGroup
+// scan + filter-by-doc-id pattern getReviewCount above already uses to solve
+// the identical "find all of someone's X" problem.
+describe("GET /users/:uid/reviews", () => {
+  it("401s without a token", async () => {
+    const app = createApp();
+    const res = await request(app).get("/users/uid-2/reviews");
+    expect(res.status).toBe(401);
+  });
+
+  it("returns each of the target's reviews with movie title/poster joined in, newest first", async () => {
+    store.set("movies/m1", { title: "Interstellar", poster: "/interstellar.jpg" });
+    store.set("movies/m2", { title: "Dune: Part Two", poster: "/dune.jpg" });
+    store.set("movies/m1/reviews/uid-2", { rating: 5, reviewText: "Loved it", isAnonymous: false, deleted: false, createdAt: new Date("2026-01-01") });
+    store.set("movies/m2/reviews/uid-2", { rating: 4, reviewText: null, isAnonymous: false, deleted: false, createdAt: new Date("2026-02-01") });
+    verifyIdToken.mockResolvedValueOnce({ uid: "uid-1", email: "x@example.com" });
+    const app = createApp();
+    const res = await request(app).get("/users/uid-2/reviews").set("Authorization", "Bearer good");
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.items).toEqual([
+      { movieId: "m2", movieTitle: "Dune: Part Two", moviePoster: "/dune.jpg", rating: 4, reviewText: null, isAnonymous: false, createdAt: "2026-02-01T00:00:00.000Z" },
+      { movieId: "m1", movieTitle: "Interstellar", moviePoster: "/interstellar.jpg", rating: 5, reviewText: "Loved it", isAnonymous: false, createdAt: "2026-01-01T00:00:00.000Z" }
+    ]);
+  });
+
+  it("excludes a deleted review", async () => {
+    store.set("movies/m1", { title: "Interstellar", poster: null });
+    store.set("movies/m1/reviews/uid-2", { rating: 5, reviewText: "x", isAnonymous: false, deleted: true, createdAt: new Date() });
+    verifyIdToken.mockResolvedValueOnce({ uid: "uid-1", email: "x@example.com" });
+    const app = createApp();
+    const res = await request(app).get("/users/uid-2/reviews").set("Authorization", "Bearer good");
+
+    expect(res.body.data.items).toEqual([]);
+  });
+
+  it("excludes someone else's anonymous review from a third party's view — the whole point of marking it anonymous", async () => {
+    store.set("movies/m1", { title: "Interstellar", poster: null });
+    store.set("movies/m1/reviews/uid-2", { rating: 5, reviewText: "x", isAnonymous: true, deleted: false, createdAt: new Date() });
+    verifyIdToken.mockResolvedValueOnce({ uid: "uid-1", email: "x@example.com" }); // uid-1 viewing uid-2's reviews
+    const app = createApp();
+    const res = await request(app).get("/users/uid-2/reviews").set("Authorization", "Bearer good");
+
+    expect(res.body.data.items).toEqual([]);
+  });
+
+  it("includes the caller's own anonymous review on their own Reviews tab — self already knows it's theirs", async () => {
+    store.set("movies/m1", { title: "Interstellar", poster: null });
+    store.set("movies/m1/reviews/uid-1", { rating: 5, reviewText: "x", isAnonymous: true, deleted: false, createdAt: new Date() });
+    verifyIdToken.mockResolvedValueOnce({ uid: "uid-1", email: "x@example.com" }); // uid-1 viewing their own reviews
+    const app = createApp();
+    const res = await request(app).get("/users/uid-1/reviews").set("Authorization", "Bearer good");
+
+    expect(res.body.data.items).toHaveLength(1);
+    expect(res.body.data.items[0].isAnonymous).toBe(true);
+  });
+
+  it("only ever includes the target's own reviews, not other people's", async () => {
+    store.set("movies/m1", { title: "Interstellar", poster: null });
+    store.set("movies/m1/reviews/uid-1", { rating: 3, reviewText: "not theirs", isAnonymous: false, deleted: false, createdAt: new Date() });
+    verifyIdToken.mockResolvedValueOnce({ uid: "uid-1", email: "x@example.com" });
+    const app = createApp();
+    const res = await request(app).get("/users/uid-2/reviews").set("Authorization", "Bearer good");
+
+    expect(res.body.data.items).toEqual([]);
   });
 });
