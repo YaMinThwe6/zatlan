@@ -86,17 +86,22 @@ export function UpcomingEvents() {
                 </div>
               </div>
               <div className="flex flex-none flex-col items-end gap-1.5">
-                <button
-                  type="button"
-                  disabled={!!status}
-                  onClick={() => handleJoin(event.eventId)}
-                  className="rounded-[9px] bg-accent px-4 py-2 text-[12px] font-bold text-bg disabled:opacity-60"
-                >
-                  {status === 'joined' ? 'Joined' : status === 'pending' ? 'Requested' : 'Join'}
-                </button>
-                {status === 'joined' && (
-                  <button type="button" onClick={() => navigate(`/rooms/${event.roomId}`)} className="text-[11px] font-semibold text-text-muted">
+                {status === 'joined' ? (
+                  <button
+                    type="button"
+                    onClick={() => navigate(`/rooms/${event.roomId}`)}
+                    className="rounded-[9px] bg-accent px-4 py-2 text-[12px] font-bold text-bg"
+                  >
                     Chat
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    disabled={status === 'pending'}
+                    onClick={() => handleJoin(event.eventId)}
+                    className="rounded-[9px] bg-accent px-4 py-2 text-[12px] font-bold text-bg disabled:opacity-60"
+                  >
+                    {status === 'pending' ? 'Requested' : 'Join'}
                   </button>
                 )}
               </div>
