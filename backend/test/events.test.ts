@@ -491,6 +491,70 @@ describe("join request approval", () => {
     expect(store.has("events/evt-1/joinRequests/guest-1")).toBe(false);
     expect(store.has("events/evt-1/participants/guest-1")).toBe(false);
   });
+
+  // Full-stack, one continuous flow through the real HTTP request chain —
+  // create, request, list-for-host, approve, then re-verify from the
+  // requester's side across a *fresh* request the way a page refresh would.
+  // This is the exact real-world scenario reported: join an in-person event
+  // that requires approval, have the host approve it, and confirm the
+  // requester's own status is now correctly "joined" everywhere, not just in
+  // the one response that happened to trigger it.
+  it("end-to-end: request to join → host approves → requester shows joined everywhere, survives a fresh request the way a refresh would", async () => {
+    store.set("users/host-1", { displayName: "Meera" });
+    store.set("users/guest-1", { displayName: "Rohan" });
+
+    const app = createApp();
+
+    // 1. Host creates an in-person, approval-required watch party.
+    currentUid = "host-1";
+    const created = await authed(app, "post", "/events").send({
+      movieId: "movie-1",
+      datetime: "2099-01-01T20:00:00.000Z",
+      mode: "in-person",
+      visibility: "public",
+      participantLimit: 5,
+      requiresApproval: true,
+      location: { area: "Near MG Road", city: "Bangalore", lat: 12.9716, lng: 77.5946 }
+    });
+    expect(created.status).toBe(201);
+    const eventId = created.body.data.eventId;
+    const roomId = created.body.data.roomId;
+
+    // 2. A different user requests to join — gets "pending", not "joined".
+    currentUid = "guest-1";
+    const joinRes = await authed(app, "put", `/events/${eventId}/join`);
+    expect(joinRes.body.data).toEqual({ status: "pending" });
+
+    // 3. Before any approval, the requester's own status is pending
+    // everywhere — both the list view (Home/Events page) and the detail page.
+    const beforeList = await authed(app, "get", "/events/upcoming");
+    expect(beforeList.body.data.items[0]).toMatchObject({ joined: false, pending: true });
+    const beforeDetail = await authed(app, "get", `/events/${eventId}`);
+    expect(beforeDetail.body.data.viewerStatus).toBe("pending");
+
+    // 4. Host sees the pending request listed, with the requester's name.
+    currentUid = "host-1";
+    const requests = await authed(app, "get", `/events/${eventId}/joinRequests`);
+    expect(requests.body.data.items).toEqual([{ uid: "guest-1", displayName: "Rohan" }]);
+
+    // 5. Host approves it.
+    const approveRes = await authed(app, "post", `/events/${eventId}/joinRequests/guest-1/approve`);
+    expect(approveRes.status).toBe(204);
+
+    // 6. The request is gone from the host's list.
+    const requestsAfter = await authed(app, "get", `/events/${eventId}/joinRequests`);
+    expect(requestsAfter.body.data.items).toEqual([]);
+
+    // 7. The requester is now a real participant, room member, and the
+    // event's headcount reflects it — a fresh GET, not the approve response,
+    // proving this is persisted state, not just an in-memory echo.
+    currentUid = "guest-1";
+    const afterList = await authed(app, "get", "/events/upcoming");
+    expect(afterList.body.data.items[0]).toMatchObject({ joined: true, pending: false, participantCount: 2 });
+    const afterDetail = await authed(app, "get", `/events/${eventId}`);
+    expect(afterDetail.body.data.viewerStatus).toBe("joined");
+    expect((store.get(`rooms/${roomId}`) as { memberIds: string[] }).memberIds).toEqual(["host-1", "guest-1"]);
+  });
 });
 
 describe("POST /events computes a geohash for in-person events with a location", () => {
