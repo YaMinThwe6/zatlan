@@ -1,6 +1,6 @@
 import { apiFetch } from '../../../lib/api'
-export type { RecommendationItem, TasteMatch, UpcomingEvent, ActivityItem, Greeting, NotificationItem, NearbyEvent, FriendsRecommendationItem, CreateEventInput, EventSummary, EventDetail, EventJoinRequest, FollowRequest } from '@binj/shared-types'
-import type { RecommendationItem, TasteMatch, UpcomingEvent, ActivityItem, Greeting, NotificationItem, NearbyEvent, FriendsRecommendationItem, CreateEventInput, EventSummary, EventDetail, EventJoinRequest, FollowRequest } from '@binj/shared-types'
+export type { RecommendationItem, TasteMatch, UpcomingEvent, ActivityItem, Greeting, NotificationItem, NearbyEvent, FriendsRecommendationItem, CreateEventInput, EventSummary, EventDetail, EventJoinRequest, EventJoinRequestsResponse, FollowRequest } from '@binj/shared-types'
+import type { RecommendationItem, TasteMatch, UpcomingEvent, ActivityItem, Greeting, NotificationItem, NearbyEvent, FriendsRecommendationItem, CreateEventInput, EventSummary, EventDetail, EventJoinRequestsResponse, FollowRequest } from '@binj/shared-types'
 
 export function getHomeGreeting(): Promise<Greeting> {
   return apiFetch('/home/greeting', { auth: true })
@@ -102,7 +102,7 @@ export function deleteEvent(eventId: string): Promise<void> {
 
 // Host-only — the event detail page's own "Join requests" section, backend
 // 403s anyone else (events.service.ts's listJoinRequests).
-export function getJoinRequests(eventId: string): Promise<{ items: EventJoinRequest[] }> {
+export function getJoinRequests(eventId: string): Promise<EventJoinRequestsResponse> {
   return apiFetch(`/events/${encodeURIComponent(eventId)}/joinRequests`, { auth: true })
 }
 

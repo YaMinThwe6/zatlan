@@ -477,14 +477,21 @@ describe("join request approval", () => {
     expect(res.status).toBe(403);
   });
 
-  it("GET joinRequests returns each pending requester's uid and displayName, for the host to approve/deny against", async () => {
+  it("GET joinRequests returns pending, approved, and denied requesters as separate lists, for the host to review all three", async () => {
     store.set("events/evt-1", { hostId: "host-1", movieId: "movie-1" });
-    store.set("events/evt-1/joinRequests/guest-1", { createdAt: new Date() });
+    store.set("events/evt-1/joinRequests/guest-1", { createdAt: new Date(), status: "pending" });
+    store.set("events/evt-1/joinRequests/guest-2", { createdAt: new Date(), status: "denied" });
+    store.set("events/evt-1/participants/guest-3", { joinedAt: new Date() });
+    store.set("events/evt-1/participants/host-1", { joinedAt: new Date() }); // the host's own auto-join — not an "approved" requester
     store.set("users/guest-1", { displayName: "Meera" });
+    store.set("users/guest-2", { displayName: "Vikram" });
+    store.set("users/guest-3", { displayName: "Priya" });
     const app = createApp(); // currentUid stays "host-1"
     const res = await authed(app, "get", "/events/evt-1/joinRequests");
     expect(res.status).toBe(200);
-    expect(res.body.data.items).toEqual([{ uid: "guest-1", displayName: "Meera" }]);
+    expect(res.body.data.requested).toEqual([{ uid: "guest-1", displayName: "Meera" }]);
+    expect(res.body.data.approved).toEqual([{ uid: "guest-3", displayName: "Priya" }]);
+    expect(res.body.data.denied).toEqual([{ uid: "guest-2", displayName: "Vikram" }]);
   });
 
   it("approve moves the pending request into participants and increments the count", async () => {
@@ -509,14 +516,28 @@ describe("join request approval", () => {
     expect(store.has("events/evt-1/joinRequests/guest-1")).toBe(true); // left pending, not silently dropped
   });
 
-  it("deny just clears the request", async () => {
+  it("deny marks the request denied rather than deleting it, so the host can still see it was denied", async () => {
     store.set("events/evt-1", { hostId: "host-1", movieId: "movie-1" });
-    store.set("events/evt-1/joinRequests/guest-1", { createdAt: new Date() });
+    store.set("events/evt-1/joinRequests/guest-1", { createdAt: new Date(), status: "pending" });
     const app = createApp();
     const res = await authed(app, "post", "/events/evt-1/joinRequests/guest-1/deny");
     expect(res.status).toBe(204);
-    expect(store.has("events/evt-1/joinRequests/guest-1")).toBe(false);
+    expect((store.get("events/evt-1/joinRequests/guest-1") as { status: string }).status).toBe("denied");
     expect(store.has("events/evt-1/participants/guest-1")).toBe(false);
+  });
+
+  it("lets a denied requester ask again — re-requesting reopens it as pending and re-notifies the host", async () => {
+    store.set("events/evt-1", { hostId: "host-1", movieId: "movie-1", requiresApproval: true, participantCount: 1, participantLimit: 5 });
+    store.set("events/evt-1/joinRequests/guest-1", { createdAt: new Date("2020-01-01"), status: "denied" });
+    currentUid = "guest-1";
+    const app = createApp();
+    const res = await authed(app, "put", "/events/evt-1/join");
+    expect(res.body.data).toEqual({ status: "pending" });
+    expect((store.get("events/evt-1/joinRequests/guest-1") as { status: string }).status).toBe("pending");
+
+    const hostNotifications = [...store.entries()].filter(([key]) => key.startsWith("users/host-1/notifications/"));
+    expect(hostNotifications).toHaveLength(1);
+    expect(hostNotifications[0][1]).toMatchObject({ type: "eventJoinRequest", fromUserId: "guest-1" });
   });
 
   it("deny notifies the requester", async () => {
@@ -573,15 +594,16 @@ describe("join request approval", () => {
     // 4. Host sees the pending request listed, with the requester's name.
     currentUid = "host-1";
     const requests = await authed(app, "get", `/events/${eventId}/joinRequests`);
-    expect(requests.body.data.items).toEqual([{ uid: "guest-1", displayName: "Rohan" }]);
+    expect(requests.body.data.requested).toEqual([{ uid: "guest-1", displayName: "Rohan" }]);
 
     // 5. Host approves it.
     const approveRes = await authed(app, "post", `/events/${eventId}/joinRequests/guest-1/approve`);
     expect(approveRes.status).toBe(204);
 
-    // 6. The request is gone from the host's list.
+    // 6. The request has moved from "requested" to "approved" on the host's list.
     const requestsAfter = await authed(app, "get", `/events/${eventId}/joinRequests`);
-    expect(requestsAfter.body.data.items).toEqual([]);
+    expect(requestsAfter.body.data.requested).toEqual([]);
+    expect(requestsAfter.body.data.approved).toEqual([{ uid: "guest-1", displayName: "Rohan" }]);
 
     // 7. The requester is now a real participant, room member, and the
     // event's headcount reflects it — a fresh GET, not the approve response,
@@ -914,6 +936,14 @@ describe("GET /events/requested", () => {
   it("excludes a soft-deleted event", async () => {
     store.set("events/evt-1", { hostId: "host-2", movieId: "movie-1", visibility: "public", datetime: new Date("2099-06-01"), deleted: true, participantCount: 1, participantLimit: 5, requiresApproval: true });
     store.set("events/evt-1/joinRequests/host-1", { createdAt: new Date() });
+    const app = createApp();
+    const res = await authed(app, "get", "/events/requested");
+    expect(res.body.data.items).toEqual([]);
+  });
+
+  it("excludes a request the host has denied — it's no longer outstanding", async () => {
+    store.set("events/evt-1", { hostId: "host-2", movieId: "movie-1", visibility: "public", datetime: new Date("2099-06-01"), participantCount: 1, participantLimit: 5, requiresApproval: true });
+    store.set("events/evt-1/joinRequests/host-1", { createdAt: new Date(), status: "denied" });
     const app = createApp();
     const res = await authed(app, "get", "/events/requested");
     expect(res.body.data.items).toEqual([]);

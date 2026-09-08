@@ -39,6 +39,11 @@ export function EventDetailPage({ me }: Props) {
   // frontend ever called them — a host had no way to act on a request
   // through the UI at all.
   const [joinRequests, setJoinRequests] = useState<EventJoinRequest[]>([])
+  // Read-only history for the host — who's already in, and who was turned
+  // down. Neither list supports any action; they're here purely so the host
+  // doesn't have to remember past decisions.
+  const [approvedRequests, setApprovedRequests] = useState<EventJoinRequest[]>([])
+  const [deniedRequests, setDeniedRequests] = useState<EventJoinRequest[]>([])
   // Per-request guard against a rapid double-click firing two overlapping
   // approve/deny calls for the same requester, same pattern used elsewhere
   // in the app (e.g. onboarding's WatchedStep).
@@ -57,7 +62,10 @@ export function EventDetailPage({ me }: Props) {
         if (res.viewerStatus === 'host' && res.requiresApproval) {
           getJoinRequests(eventId)
             .then((r) => {
-              if (!cancelled) setJoinRequests(r.items)
+              if (cancelled) return
+              setJoinRequests(r.requested)
+              setApprovedRequests(r.approved)
+              setDeniedRequests(r.denied)
             })
             .catch(() => {
               // A minor section on a page that already loaded successfully —
@@ -82,7 +90,9 @@ export function EventDetailPage({ me }: Props) {
     setActingOn((prev) => new Set(prev).add(requesterUid))
     try {
       await approveJoinRequest(eventId, requesterUid)
+      const requester = joinRequests.find((r) => r.uid === requesterUid)
       setJoinRequests((prev) => prev.filter((r) => r.uid !== requesterUid))
+      if (requester) setApprovedRequests((prev) => [...prev, requester])
       setEvent((prev) => (prev ? { ...prev, participantCount: prev.participantCount + 1 } : prev))
     } catch (err) {
       setActionError(err instanceof Error ? err.message : 'Failed to approve this request')
@@ -101,7 +111,9 @@ export function EventDetailPage({ me }: Props) {
     setActingOn((prev) => new Set(prev).add(requesterUid))
     try {
       await denyJoinRequest(eventId, requesterUid)
+      const requester = joinRequests.find((r) => r.uid === requesterUid)
       setJoinRequests((prev) => prev.filter((r) => r.uid !== requesterUid))
+      if (requester) setDeniedRequests((prev) => [...prev, requester])
     } catch (err) {
       setActionError(err instanceof Error ? err.message : 'Failed to deny this request')
     } finally {
@@ -235,6 +247,36 @@ export function EventDetailPage({ me }: Props) {
                             Deny
                           </button>
                         </div>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {viewerStatus === 'host' && approvedRequests.length > 0 && (
+                <div className="flex flex-col gap-3 rounded-2xl border border-border-soft bg-surface p-4">
+                  <h2 className="text-[13px] font-bold text-text">
+                    Approved <span className="text-text-muted">({approvedRequests.length})</span>
+                  </h2>
+                  <ul className="flex flex-col gap-2">
+                    {approvedRequests.map((request) => (
+                      <li key={request.uid} className="text-[13px] text-text">
+                        {request.displayName}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {viewerStatus === 'host' && deniedRequests.length > 0 && (
+                <div className="flex flex-col gap-3 rounded-2xl border border-border-soft bg-surface p-4">
+                  <h2 className="text-[13px] font-bold text-text">
+                    Denied <span className="text-text-muted">({deniedRequests.length})</span>
+                  </h2>
+                  <ul className="flex flex-col gap-2">
+                    {deniedRequests.map((request) => (
+                      <li key={request.uid} className="text-[13px] text-text-muted">
+                        {request.displayName}
                       </li>
                     ))}
                   </ul>

@@ -135,7 +135,7 @@ describe('EventDetailPage', () => {
 
     it("fetches and shows each pending requester, with Approve/Deny — the gap this closes: there was previously no way for a host to act on a request at all", async () => {
       getEvent.mockResolvedValue(hostEvent)
-      getJoinRequests.mockResolvedValue({ items: [{ uid: 'req-1', displayName: 'Rohan' }] })
+      getJoinRequests.mockResolvedValue({ requested: [{ uid: 'req-1', displayName: 'Rohan' }], approved: [], denied: [] })
       renderAt()
 
       await waitFor(() => expect(getJoinRequests).toHaveBeenCalledWith('evt-1'))
@@ -162,16 +162,16 @@ describe('EventDetailPage', () => {
 
     it('shows no join-requests section when there are none pending', async () => {
       getEvent.mockResolvedValue(hostEvent)
-      getJoinRequests.mockResolvedValue({ items: [] })
+      getJoinRequests.mockResolvedValue({ requested: [], approved: [], denied: [] })
       renderAt()
 
       await waitFor(() => expect(getJoinRequests).toHaveBeenCalled())
       expect(screen.queryByText(/join request/i)).not.toBeInTheDocument()
     })
 
-    it('clicking Approve calls approveJoinRequest and removes that requester from the list', async () => {
+    it('clicking Approve calls approveJoinRequest, moving that requester into the Approved list', async () => {
       getEvent.mockResolvedValue(hostEvent)
-      getJoinRequests.mockResolvedValue({ items: [{ uid: 'req-1', displayName: 'Rohan' }] })
+      getJoinRequests.mockResolvedValue({ requested: [{ uid: 'req-1', displayName: 'Rohan' }], approved: [], denied: [] })
       approveJoinRequest.mockResolvedValue(undefined)
       renderAt()
 
@@ -179,12 +179,14 @@ describe('EventDetailPage', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Approve' }))
 
       await waitFor(() => expect(approveJoinRequest).toHaveBeenCalledWith('evt-1', 'req-1'))
-      await waitFor(() => expect(screen.queryByText('Rohan')).not.toBeInTheDocument())
+      await waitFor(() => expect(screen.queryByRole('button', { name: 'Approve' })).not.toBeInTheDocument())
+      // still visible — just moved out of the pending section, into Approved
+      expect(screen.getByText('Rohan')).toBeInTheDocument()
     })
 
-    it('clicking Deny calls denyJoinRequest and removes that requester from the list', async () => {
+    it('clicking Deny calls denyJoinRequest, moving that requester into the Denied list', async () => {
       getEvent.mockResolvedValue(hostEvent)
-      getJoinRequests.mockResolvedValue({ items: [{ uid: 'req-1', displayName: 'Rohan' }] })
+      getJoinRequests.mockResolvedValue({ requested: [{ uid: 'req-1', displayName: 'Rohan' }], approved: [], denied: [] })
       denyJoinRequest.mockResolvedValue(undefined)
       renderAt()
 
@@ -192,12 +194,14 @@ describe('EventDetailPage', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Deny' }))
 
       await waitFor(() => expect(denyJoinRequest).toHaveBeenCalledWith('evt-1', 'req-1'))
-      await waitFor(() => expect(screen.queryByText('Rohan')).not.toBeInTheDocument())
+      await waitFor(() => expect(screen.queryByRole('button', { name: 'Deny' })).not.toBeInTheDocument())
+      // still visible — just moved out of the pending section, into Denied
+      expect(screen.getByText('Rohan')).toBeInTheDocument()
     })
 
     it('shows an error and leaves the request in the list when approving fails', async () => {
       getEvent.mockResolvedValue(hostEvent)
-      getJoinRequests.mockResolvedValue({ items: [{ uid: 'req-1', displayName: 'Rohan' }] })
+      getJoinRequests.mockResolvedValue({ requested: [{ uid: 'req-1', displayName: 'Rohan' }], approved: [], denied: [] })
       approveJoinRequest.mockRejectedValue(new Error('This event is at capacity'))
       renderAt()
 
@@ -206,6 +210,24 @@ describe('EventDetailPage', () => {
 
       expect(await screen.findByRole('alert')).toHaveTextContent('This event is at capacity')
       expect(screen.getByText('Rohan')).toBeInTheDocument()
+    })
+
+    it("shows who's already been approved, read-only (no Approve/Deny — they're already in)", async () => {
+      getEvent.mockResolvedValue(hostEvent)
+      getJoinRequests.mockResolvedValue({ requested: [], approved: [{ uid: 'p-1', displayName: 'Priya' }], denied: [] })
+      renderAt()
+
+      expect(await screen.findByText('Priya')).toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: 'Approve' })).not.toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: 'Deny' })).not.toBeInTheDocument()
+    })
+
+    it('shows who has been denied, so the host has a record of past decisions', async () => {
+      getEvent.mockResolvedValue(hostEvent)
+      getJoinRequests.mockResolvedValue({ requested: [], approved: [], denied: [{ uid: 'd-1', displayName: 'Vikram' }] })
+      renderAt()
+
+      expect(await screen.findByText('Vikram')).toBeInTheDocument()
     })
   })
 })

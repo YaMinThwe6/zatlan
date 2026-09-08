@@ -78,6 +78,15 @@ export interface EventJoinRequest {
   displayName: string
 }
 
+// GET /events/:eventId/joinRequests response — the host's event detail page
+// needs all three: who's asked (requested), who's in (approved), who was
+// turned down (denied).
+export interface EventJoinRequestsResponse {
+  requested: EventJoinRequest[]
+  approved: EventJoinRequest[]
+  denied: EventJoinRequest[]
+}
+
 // POST /events request body — hld.md §7 "Create Event", api-contracts.md §8.
 // `location` is required only for mode: 'in-person' (events.service.ts's
 // createEvent rejects an in-person event without one); ignored for 'online'.
