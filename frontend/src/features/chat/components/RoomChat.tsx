@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { sendMessage, deleteMessage, subscribeToMessages, type RoomMessage } from '../services/roomApi'
+import { getRoom, sendMessage, deleteMessage, subscribeToMessages, type RoomMessage, type RoomDetail } from '../services/roomApi'
 import { reportContent, type CreateReportResult } from '../../../lib/api'
 import { useAuth } from '../../../lib/AuthContext'
 import { Sidebar } from '../../../components/Sidebar'
@@ -34,6 +34,7 @@ export function RoomChat() {
   const navigate = useNavigate()
   const { user, signOutUser } = useAuth()
   const currentUid = user!.uid
+  const [room, setRoom] = useState<RoomDetail | null>(null)
   const [messages, setMessages] = useState<RoomMessage[]>([])
   const [connected, setConnected] = useState(false)
   const [error, setError] = useState('')
@@ -52,6 +53,26 @@ export function RoomChat() {
     })
     return unsubscribe
   }, [roomId])
+
+  useEffect(() => {
+    let cancelled = false
+    setRoom(null)
+    getRoom(roomId)
+      .then((res) => {
+        if (!cancelled) setRoom(res)
+      })
+      .catch(() => {
+        // Non-fatal — the header just falls back to the generic title, and
+        // messages render without an author label. The chat itself (Firestore
+        // subscription) doesn't depend on this succeeding.
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [roomId])
+
+  // uid -> displayName, for labelling each other member's messages.
+  const memberNames = new Map((room?.members ?? []).map((m) => [m.uid, m.displayName]))
 
   async function handleSend(e: React.FormEvent) {
     e.preventDefault()
@@ -120,7 +141,7 @@ export function RoomChat() {
                 <path d="M15 18l-6-6 6-6" />
               </svg>
             </button>
-            <h1 className="text-[15px] font-bold text-text">Room chat</h1>
+            <h1 className="truncate text-[15px] font-bold text-text">{room?.eventTitle ?? 'Room chat'}</h1>
           </header>
 
           {!connected && <p className="px-4 py-2 text-[12.5px] text-text-muted">Connecting…</p>}
@@ -135,6 +156,9 @@ export function RoomChat() {
           const mine = m.authorId === currentUid
           return (
             <li key={m.messageId} className={`flex flex-col ${mine ? 'items-end' : 'items-start'}`}>
+              {!mine && (
+                <span className="mb-0.5 px-1 text-[10.5px] font-semibold text-text-muted">{memberNames.get(m.authorId) ?? 'Unknown'}</span>
+              )}
               <div
                 className={`max-w-[78%] rounded-2xl px-3.5 py-2.5 text-[13.5px] leading-relaxed ${
                   mine ? 'rounded-br-sm bg-accent text-bg' : 'rounded-bl-sm border border-border bg-input text-text'

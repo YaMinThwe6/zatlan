@@ -2,6 +2,7 @@ import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { MemoryRouter, Routes, Route, Link } from 'react-router-dom'
 
+const getRoom = vi.fn()
 const sendMessage = vi.fn()
 const deleteMessage = vi.fn()
 const subscribeToMessages = vi.fn()
@@ -10,7 +11,7 @@ const reportContent = vi.fn()
 const getMe = vi.fn()
 const getNotifications = vi.fn()
 
-vi.mock('../../../../src/features/chat/services/roomApi', () => ({ sendMessage, deleteMessage, subscribeToMessages }))
+vi.mock('../../../../src/features/chat/services/roomApi', () => ({ getRoom, sendMessage, deleteMessage, subscribeToMessages }))
 vi.mock('../../../../src/lib/api', () => ({ reportContent, getMe }))
 // AppHeader's own dependencies — it's now part of RoomChat's shared shell
 // (Sidebar/AppHeader/MobileTabBar on every signed-in page).
@@ -39,9 +40,19 @@ beforeEach(() => {
   // the shared shell renders without throwing.
   getMe.mockResolvedValue({ uid: 'uid-1', displayName: 'Arjun', email: 'arjun@example.com' })
   getNotifications.mockResolvedValue({ items: [] })
+  getRoom.mockResolvedValue({
+    roomId: 'room-1',
+    type: 'ephemeral',
+    eventTitle: 'Rooftop watch',
+    members: [
+      { uid: 'uid-1', displayName: 'Arjun' },
+      { uid: 'uid-2', displayName: 'Rohan' }
+    ]
+  })
 })
 
 afterEach(() => {
+  getRoom.mockReset()
   sendMessage.mockReset()
   deleteMessage.mockReset()
   subscribeToMessages.mockReset()
@@ -80,6 +91,26 @@ describe('RoomChat', () => {
     expect(screen.getByText('Hey everyone!')).toBeInTheDocument()
     expect(screen.getByText('On my way')).toBeInTheDocument()
     expect(screen.queryByText('this got removed')).not.toBeInTheDocument()
+  })
+
+  it("shows the event's title as the page heading, not the generic 'Room chat'", async () => {
+    mockSubscription(messages)
+    renderWithRouter()
+
+    expect(await screen.findByRole('heading', { name: 'Rooftop watch' })).toBeInTheDocument()
+    expect(screen.queryByText('Room chat')).not.toBeInTheDocument()
+  })
+
+  it("labels each other member's message with their display name", async () => {
+    mockSubscription(messages)
+    renderWithRouter()
+
+    // m2 is from uid-2 (Rohan). "Arjun" (the caller, uid-1) legitimately
+    // appears elsewhere on the page (AppHeader's own identity), so this
+    // checks the label sits right next to their message, not just that the
+    // text exists anywhere on the page.
+    const rohanLabel = await screen.findByText('Rohan')
+    expect(rohanLabel.closest('li')).toHaveTextContent('On my way')
   })
 
   it('unsubscribes on unmount', () => {

@@ -124,9 +124,55 @@ beforeEach(() => {
   store.set("movies/movie-1", { title: "Dune: Part Two" });
 });
 
-function authed(app: ReturnType<typeof createApp>, method: "post" | "patch" | "delete", path: string) {
+function authed(app: ReturnType<typeof createApp>, method: "get" | "post" | "patch" | "delete", path: string) {
   return request(app)[method](path).set("Authorization", "Bearer good");
 }
+
+describe("GET /rooms/:roomId", () => {
+  it("401s without a token", async () => {
+    const app = createApp();
+    const res = await request(app).get("/rooms/room-1");
+    expect(res.status).toBe(401);
+  });
+
+  it("404s for a nonexistent room", async () => {
+    const app = createApp();
+    const res = await authed(app, "get", "/rooms/no-such-room");
+    expect(res.status).toBe(404);
+  });
+
+  it("403s when the caller isn't a member of the room", async () => {
+    store.set("rooms/room-1", { type: "ephemeral", originEventId: "evt-1", memberIds: ["someone-else"] });
+    const app = createApp();
+    const res = await authed(app, "get", "/rooms/room-1");
+    expect(res.status).toBe(403);
+  });
+
+  it("returns the event's title and every member's display name, for RoomChat's own header and message-author labels", async () => {
+    store.set("users/uid-2", { displayName: "Rohan", status: "active" });
+    store.set("events/evt-1", { hostId: "uid-1", movieId: "movie-1", title: "Rooftop watch" });
+    store.set("rooms/room-1", { type: "ephemeral", originEventId: "evt-1", memberIds: ["uid-1", "uid-2"] });
+    const app = createApp();
+    const res = await authed(app, "get", "/rooms/room-1");
+    expect(res.status).toBe(200);
+    expect(res.body.data).toMatchObject({
+      roomId: "room-1",
+      eventTitle: "Rooftop watch",
+      members: expect.arrayContaining([
+        { uid: "uid-1", displayName: "Arjun" },
+        { uid: "uid-2", displayName: "Rohan" }
+      ])
+    });
+  });
+
+  it("falls back to the movie's title when the event has no custom title", async () => {
+    store.set("events/evt-1", { hostId: "uid-1", movieId: "movie-1", title: null });
+    store.set("rooms/room-1", { type: "ephemeral", originEventId: "evt-1", memberIds: ["uid-1"] });
+    const app = createApp();
+    const res = await authed(app, "get", "/rooms/room-1");
+    expect(res.body.data.eventTitle).toBe("Dune: Part Two");
+  });
+});
 
 describe("POST /rooms/:roomId/messages", () => {
   it("401s without a token", async () => {

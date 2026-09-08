@@ -16,6 +16,13 @@ function toIso(value: FirebaseFirestore.Timestamp | Date | null): string | null 
   return value instanceof Date ? value.toISOString() : value.toDate().toISOString();
 }
 
+export interface RoomDetail {
+  roomId: string;
+  type: "ephemeral" | "persistent";
+  eventTitle: string;
+  members: { uid: string; displayName: string }[];
+}
+
 async function requireRoom(roomId: string) {
   const db = requireDb();
   const roomRef = db.collection("rooms").doc(roomId);
@@ -31,6 +38,36 @@ function requireMember(uid: string, room: FirebaseFirestore.DocumentData): void 
   if (!memberIds.includes(uid)) {
     throw new AppError("FORBIDDEN", "You're not a member of this room", 403);
   }
+}
+
+// GET /rooms/:roomId — member-only. RoomChat.tsx's own header/message-author
+// labels need this: messages themselves only ever carry a bare authorId
+// (reads bypass the backend entirely, straight from Firestore — see
+// sendMessage's comment below), so this is the one place that resolves the
+// room back to its event's title and its members' display names.
+export async function getRoomDetail(uid: string, roomId: string): Promise<RoomDetail> {
+  const { db, room } = await requireRoom(roomId);
+  requireMember(uid, room);
+
+  const memberIds = (room.memberIds as string[] | undefined) ?? [];
+  const [eventSnap, memberSnaps] = await Promise.all([
+    db.collection("events").doc(room.originEventId as string).get(),
+    Promise.all(memberIds.map((memberId) => db.collection("users").doc(memberId).get()))
+  ]);
+  const eventData = eventSnap.data();
+  const movieId = eventData?.movieId as string | undefined;
+  const movieSnap = movieId ? await db.collection("movies").doc(movieId).get() : null;
+  const eventTitle = (eventData?.title as string | null | undefined) ?? (movieSnap?.data()?.title as string | undefined) ?? "Watch party";
+
+  return {
+    roomId,
+    type: room.type as "ephemeral" | "persistent",
+    eventTitle,
+    members: memberIds.map((memberId, i) => ({
+      uid: memberId,
+      displayName: (memberSnaps[i].data()?.displayName as string | undefined) ?? "Unknown"
+    }))
+  };
 }
 
 // POST /rooms/:roomId/messages — hld.md §16. Reads bypass this entirely (the
