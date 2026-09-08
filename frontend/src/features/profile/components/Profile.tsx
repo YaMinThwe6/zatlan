@@ -106,9 +106,10 @@ function ActivityLine({ item }: { item: PublicProfile['recentActivity'][number] 
 // Movies and the self "Taste Profile" donut (no rating-ranked list or
 // taste-profile algorithm exists), Upcoming Events (this page doesn't own
 // that data), and the blocked-account scenario (no blocking feature exists
-// in this codebase). Edit Profile and the message/compose action are shown
-// disabled with "Coming soon", the same treatment Sidebar's own
-// not-yet-built nav rows already use, rather than wiring a button to nothing.
+// in this codebase). The message/compose action is shown disabled with
+// "Coming soon", the same treatment Sidebar's own not-yet-built nav rows
+// already use, rather than wiring a button to nothing. Edit Profile opens
+// Settings' existing edit flow instead of duplicating one here.
 export function Profile() {
   // Only ever mounted via the "/profile/:uid" route (App.tsx), so this
   // segment is always present in practice — the assertion just tells
@@ -240,7 +241,15 @@ export function Profile() {
 
         <div className="mt-4.5 flex items-center gap-2.5 lg:mt-0">
           {isSelf ? (
-            <button type="button" disabled title="Coming soon" className="min-w-[150px] cursor-default rounded-xl border border-border bg-surface-alt px-6 py-3 text-[13.5px] font-bold text-text-faint">
+            // Settings already has a real, working displayName/username edit
+            // flow — this opens it rather than duplicating a form here,
+            // especially with a Profile UI redesign already planned
+            // separately.
+            <button
+              type="button"
+              onClick={() => navigate('/settings')}
+              className="min-w-[150px] rounded-xl border border-border bg-surface-alt px-6 py-3 text-[13.5px] font-bold text-text"
+            >
               Edit Profile
             </button>
           ) : (

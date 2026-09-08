@@ -68,6 +68,7 @@ function renderWithRouter(uid = 'u1') {
         <Route path="/" element={<p>Previous page</p>} />
         <Route path="/profile/:uid" element={<Profile />} />
         <Route path="/movie/:movieId" element={<p>Movie detail page</p>} />
+        <Route path="/settings" element={<p>Settings page</p>} />
       </Routes>
     </MemoryRouter>
   )
@@ -137,14 +138,25 @@ describe('Profile', () => {
     expect(await screen.findByRole('button', { name: 'Connect' })).toBeInTheDocument()
   })
 
-  it('does not show a follow button when viewing your own profile, shows a disabled Edit Profile instead', async () => {
+  it('does not show a follow button when viewing your own profile, shows an Edit Profile button instead', async () => {
     getUserProfile.mockResolvedValue({ ...baseProfile, relationship: 'self', tasteMatchScore: null })
     renderWithRouter()
 
     await waitFor(() => expect(screen.getByText('Rohan')).toBeInTheDocument())
     expect(screen.queryByRole('button', { name: /connect|following|requested/i })).not.toBeInTheDocument()
-    const editButton = screen.getByRole('button', { name: /edit profile/i })
-    expect(editButton).toBeDisabled()
+    expect(screen.getByRole('button', { name: /edit profile/i })).toBeEnabled()
+  })
+
+  // Settings already has a real, working displayName/username edit flow —
+  // Edit Profile just opens it rather than duplicating that form here,
+  // especially with a Profile UI redesign already planned (separate from
+  // this fix).
+  it('navigates to Settings when Edit Profile is clicked', async () => {
+    getUserProfile.mockResolvedValue({ ...baseProfile, relationship: 'self', tasteMatchScore: null })
+    renderWithRouter()
+
+    fireEvent.click(await screen.findByRole('button', { name: /edit profile/i }))
+    expect(await screen.findByText('Settings page')).toBeInTheDocument()
   })
 
   it('lists public watched movies', async () => {
