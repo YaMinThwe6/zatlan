@@ -163,10 +163,25 @@ export function EventsPage() {
                 {error}
               </p>
             )}
-            {!loading && !error && items.length === 0 && (
-              <p className="text-sm text-text-muted">
-                {tab === 'upcoming' ? 'No public events coming up yet — be the first to host one.' : "You're not hosting any upcoming events."}
-              </p>
+            {!loading && !error && items.length === 0 && tab === 'upcoming' && (
+              <p className="text-sm text-text-muted">No public events coming up yet — be the first to host one.</p>
+            )}
+            {!loading && !error && items.length === 0 && tab === 'hosting' && (
+              // Real gap this closes: the old plain-text message had no way
+              // to act on it — the header's own "+ Host a watch party"
+              // button was easy to miss up top, especially on mobile where
+              // it's a single small icon-adjacent button far from this
+              // message.
+              <div className="flex flex-col items-center gap-3 rounded-2xl border border-dashed border-border-soft py-10 text-center">
+                <p className="text-sm text-text-muted">You&rsquo;re not hosting any upcoming events.</p>
+                <button
+                  type="button"
+                  onClick={() => setCreateOpen(true)}
+                  className="rounded-[10px] bg-accent px-4 py-2.5 text-[12px] font-bold text-bg"
+                >
+                  + Host a watch party
+                </button>
+              </div>
             )}
             {!loading && !error && items.length > 0 && groupedItems.length === 0 && (
               <p className="text-sm text-text-muted">No events match this filter.</p>

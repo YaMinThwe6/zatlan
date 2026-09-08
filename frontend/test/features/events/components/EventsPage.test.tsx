@@ -82,6 +82,25 @@ describe('EventsPage', () => {
     expect(await screen.findByText(/No public events coming up yet/i)).toBeInTheDocument()
   })
 
+  it('shows a "Host a watch party" CTA on the Hosting tab\'s empty state, opening the create-event modal — the old message had no way to act on it', async () => {
+    getUpcomingEvents.mockResolvedValue({ items: [] })
+    getHostedEvents.mockResolvedValue({ items: [] })
+    renderWithRouter()
+
+    await waitFor(() => expect(getUpcomingEvents).toHaveBeenCalled())
+    fireEvent.click(screen.getByRole('button', { name: 'Hosting' }))
+
+    expect(await screen.findByText(/not hosting any upcoming events/i)).toBeInTheDocument()
+    // Two matches now — the header's persistent button and the empty
+    // state's own dedicated CTA. Asserting the count, not just "one of them
+    // works", is what actually proves the empty state grew its own button
+    // rather than this test passing by coincidence via the header's.
+    const ctas = screen.getAllByRole('button', { name: /host a watch party/i })
+    expect(ctas.length).toBe(2)
+    fireEvent.click(ctas[ctas.length - 1])
+    expect(screen.getByRole('dialog', { name: /host a watch party/i })).toBeInTheDocument()
+  })
+
   it('shows Requested immediately on load for an approval-required event the backend already reports as pending — real bug: this used to reset to "Join" on every page refresh', async () => {
     getUpcomingEvents.mockResolvedValue({ items: [{ ...upcomingEvent, requiresApproval: true, joined: false, pending: true }] })
     renderWithRouter()
