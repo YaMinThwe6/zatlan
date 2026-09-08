@@ -150,6 +150,14 @@ export function Profile() {
         setError(err instanceof Error ? err.message : 'Failed to connect')
       }
     } else {
+      // Real gap: clicking Following used to unfollow instantly, with no way
+      // to back out of an accidental click. Only gated for an actual
+      // unfollow, not for canceling a still-pending follow request (that
+      // was never a real relationship to begin with).
+      if (previous === 'following' && !window.confirm(`Unfollow ${profile.displayName}?`)) {
+        setConnectPending(false)
+        return
+      }
       setProfile({ ...profile, relationship: 'none', followerCount: Math.max(0, profile.followerCount - 1) })
       try {
         await unfollowUser(uid)

@@ -57,6 +57,7 @@ afterEach(() => {
   unfollowUser.mockReset()
   getNotifications.mockClear()
   getMe.mockClear()
+  vi.restoreAllMocks() // undoes any window.confirm spy from the unfollow-confirmation tests
 })
 
 // Seeds two history entries so the "Back" button's navigate(-1) has
@@ -126,7 +127,8 @@ describe('Profile', () => {
     expect(await screen.findByRole('button', { name: 'Following' })).toBeInTheDocument()
   })
 
-  it('unfollows when clicking Following', async () => {
+  it('confirms before unfollowing when clicking Following, then unfollows once confirmed', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
     getUserProfile.mockResolvedValue({ ...baseProfile, relationship: 'following' })
     unfollowUser.mockResolvedValue(undefined)
     renderWithRouter()
@@ -134,8 +136,22 @@ describe('Profile', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: 'Following' })).toBeInTheDocument())
     fireEvent.click(screen.getByRole('button', { name: 'Following' }))
 
+    expect(window.confirm).toHaveBeenCalled()
     await waitFor(() => expect(unfollowUser).toHaveBeenCalledWith('u1'))
     expect(await screen.findByRole('button', { name: 'Connect' })).toBeInTheDocument()
+  })
+
+  it('does not unfollow when the confirm popup is declined — real gap: clicking Following used to unfollow instantly with no way to back out of an accidental click', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(false)
+    getUserProfile.mockResolvedValue({ ...baseProfile, relationship: 'following' })
+    renderWithRouter()
+
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Following' })).toBeInTheDocument())
+    fireEvent.click(screen.getByRole('button', { name: 'Following' }))
+
+    expect(window.confirm).toHaveBeenCalled()
+    expect(unfollowUser).not.toHaveBeenCalled()
+    expect(screen.getByRole('button', { name: 'Following' })).toBeInTheDocument()
   })
 
   it('does not show a follow button when viewing your own profile, shows an Edit Profile button instead', async () => {
@@ -397,6 +413,7 @@ describe('Profile', () => {
   })
 
   it('decrements the Followers count immediately after unfollowing', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
     getUserProfile.mockResolvedValue({ ...baseProfile, relationship: 'following' }) // followerCount: 12
     unfollowUser.mockResolvedValue(undefined)
     renderWithRouter()
