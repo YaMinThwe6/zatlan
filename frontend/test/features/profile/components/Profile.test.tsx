@@ -331,7 +331,7 @@ describe('Profile', () => {
     expect(screen.queryByText(/Preferred languages:/)).not.toBeInTheDocument()
   })
 
-  it('highlights the Sidebar\'s Profile nav row, not Home, while viewing a profile page', async () => {
+  it('does not highlight Home (or anything else) in the Sidebar while viewing a profile page — there is no "Profile" nav row anymore', async () => {
     getUserProfile.mockResolvedValue(baseProfile)
     renderWithRouter()
 
@@ -340,9 +340,8 @@ describe('Profile', () => {
     // button, so an unscoped query is now ambiguous between the two.
     const sidebar = within(document.querySelector('aside')!)
     const homeRow = sidebar.getByRole('button', { name: 'Home' })
-    const profileRow = await sidebar.findByRole('button', { name: 'Profile' })
     expect(homeRow.querySelector('span')).not.toHaveClass('text-accent')
-    expect(profileRow.querySelector('span')).toHaveClass('text-accent')
+    expect(sidebar.queryByRole('button', { name: 'Profile' })).not.toBeInTheDocument()
   })
 
   // QA (docs/qa/profile-bugs.md #2): Profile never rendered MobileTabBar, so

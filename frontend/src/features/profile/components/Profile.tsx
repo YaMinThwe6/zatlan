@@ -420,7 +420,7 @@ export function Profile() {
     // below lg anyway). Same fix applied to Home.tsx/MovieDetail.tsx, which
     // share this exact shell shape and had the identical bug.
     <div className="flex min-h-svh bg-bg text-text lg:h-svh">
-      <Sidebar active="profile" />
+      <Sidebar />
       <main className="min-w-0 flex-1 lg:flex lg:flex-col">
         <AppHeader onSignOut={() => void signOutUser()} />
         <div className="lg:min-h-0 lg:flex-1 lg:overflow-y-auto">{content}</div>

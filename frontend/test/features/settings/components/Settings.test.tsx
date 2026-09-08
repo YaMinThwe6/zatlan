@@ -77,7 +77,11 @@ describe('Settings', () => {
     renderSettings()
 
     expect(screen.getByText('BINJ')).toBeInTheDocument() // Sidebar's own logo mark
-    await waitFor(() => expect(getMe).toHaveBeenCalled()) // AppHeader/Sidebar fetching their own `me`
+    // Settings supplies `me` directly to AppHeader (no independent fetch, see
+    // AppHeader's own comment on that), and Sidebar has no self-fetch of its
+    // own at all — so the signal this shell actually rendered is the
+    // identity bar's content, not a getMe() call.
+    await waitFor(() => expect(screen.getByText('Ananya Rao')).toBeInTheDocument())
     const sidebar = within(document.querySelector('aside')!)
     const settingsRow = sidebar.getByText('Settings').closest('button')
     expect(settingsRow?.querySelector('span')).toHaveClass('text-accent')
