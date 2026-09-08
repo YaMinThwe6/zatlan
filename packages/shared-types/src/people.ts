@@ -52,6 +52,15 @@ export interface TopFollowedPerson {
   followerCount: number
 }
 
+// GET /users/me/followRequests item — Settings' Privacy section, shown when
+// "Approve followers manually" is on. One row per person awaiting approval,
+// for the caller's own Approve/Deny actions.
+export interface FollowRequest {
+  uid: string
+  displayName: string
+  photoURL: string | null
+}
+
 // GET /movies/:movieId/watchedBy item — hld.md §5a. Scoped to the caller's
 // own `following` list, both list-level (users.listVisible) and per-entry
 // (watched.visibility) privacy checks applied server-side.

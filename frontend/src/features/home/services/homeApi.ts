@@ -1,6 +1,6 @@
 import { apiFetch } from '../../../lib/api'
-export type { RecommendationItem, TasteMatch, UpcomingEvent, ActivityItem, Greeting, NotificationItem, NearbyEvent, FriendsRecommendationItem, CreateEventInput, EventSummary, EventDetail, EventJoinRequest } from '@binj/shared-types'
-import type { RecommendationItem, TasteMatch, UpcomingEvent, ActivityItem, Greeting, NotificationItem, NearbyEvent, FriendsRecommendationItem, CreateEventInput, EventSummary, EventDetail, EventJoinRequest } from '@binj/shared-types'
+export type { RecommendationItem, TasteMatch, UpcomingEvent, ActivityItem, Greeting, NotificationItem, NearbyEvent, FriendsRecommendationItem, CreateEventInput, EventSummary, EventDetail, EventJoinRequest, FollowRequest } from '@binj/shared-types'
+import type { RecommendationItem, TasteMatch, UpcomingEvent, ActivityItem, Greeting, NotificationItem, NearbyEvent, FriendsRecommendationItem, CreateEventInput, EventSummary, EventDetail, EventJoinRequest, FollowRequest } from '@binj/shared-types'
 
 export function getHomeGreeting(): Promise<Greeting> {
   return apiFetch('/home/greeting', { auth: true })
@@ -28,6 +28,21 @@ export function followUser(uid: string): Promise<{ status: 'following' | 'pendin
 
 export function unfollowUser(uid: string): Promise<void> {
   return apiFetch(`/users/${encodeURIComponent(uid)}/follow`, { method: 'DELETE', auth: true })
+}
+
+// Settings' Privacy section — shown alongside "Approve followers manually".
+// The backend has always supported this (GET/approve/deny); this was the
+// missing frontend wiring, same gap the event join-request UI closed earlier.
+export function getFollowRequests(): Promise<{ items: FollowRequest[] }> {
+  return apiFetch('/users/me/followRequests', { auth: true })
+}
+
+export function approveFollowRequest(requesterUid: string): Promise<void> {
+  return apiFetch(`/users/me/followRequests/${encodeURIComponent(requesterUid)}/approve`, { method: 'POST', auth: true })
+}
+
+export function denyFollowRequest(requesterUid: string): Promise<void> {
+  return apiFetch(`/users/me/followRequests/${encodeURIComponent(requesterUid)}/deny`, { method: 'POST', auth: true })
 }
 
 // Reachable by a signed-out guest too (MovieSearch.tsx's Discover teaser),
