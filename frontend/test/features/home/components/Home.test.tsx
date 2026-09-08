@@ -73,6 +73,7 @@ function renderWithRouter(onSignOut: () => void) {
         <Route path="/" element={<Home me={me} onSignOut={onSignOut} />} />
         <Route path="/search" element={<p>Search page</p>} />
         <Route path="/story" element={<p>About page</p>} />
+        <Route path="/profile/:uid" element={<p>Profile page</p>} />
       </Routes>
     </MemoryRouter>
   )
@@ -103,6 +104,19 @@ describe('Home', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /sign out/i }))
     expect(onSignOut).toHaveBeenCalled()
+  })
+
+  // Real bug: Home.tsx has always had its own hand-rolled header (predates
+  // AppHeader, per that component's own comment) rather than reusing it — so
+  // when AppHeader's avatar/name became the new entry point to your own
+  // profile, this page's copy of that same markup never got the fix. The
+  // very first page a signed-in user sees had no way to reach their profile.
+  it("navigates to the caller's own profile when their avatar/name is clicked", async () => {
+    mockAllEmpty()
+    renderWithRouter(vi.fn())
+
+    fireEvent.click(screen.getByRole('button', { name: /arjun/i }))
+    expect(await screen.findByText('Profile page')).toBeInTheDocument()
   })
 
   it('offers an Our Story link, both in the desktop sidebar and the mobile footer', async () => {

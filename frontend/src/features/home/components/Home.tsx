@@ -85,10 +85,18 @@ export function Home({ me, onSignOut }: Props) {
                 </span>
               )}
             </button>
-            <div className="flex h-9 w-9 items-center justify-center rounded-full border border-[rgba(var(--accent-rgb),0.35)] bg-[rgba(var(--accent-rgb),0.16)] text-[13px] font-bold text-accent">
-              {initial}
-            </div>
-            <span className="hidden text-[13px] font-semibold text-text lg:inline">{me.displayName}</span>
+            {/* Real bug: this page has always had its own hand-rolled header
+                (predates AppHeader) instead of reusing it, so when
+                AppHeader's avatar/name became the entry point to your own
+                profile, this copy of the same markup never got that fix —
+                the very first page a signed-in user sees had no way to
+                reach their profile at all. */}
+            <button type="button" onClick={() => navigate(`/profile/${me.uid}`)} className="flex items-center gap-2.5">
+              <div className="flex h-9 w-9 items-center justify-center rounded-full border border-[rgba(var(--accent-rgb),0.35)] bg-[rgba(var(--accent-rgb),0.16)] text-[13px] font-bold text-accent">
+                {initial}
+              </div>
+              <span className="hidden text-[13px] font-semibold text-text lg:inline">{me.displayName}</span>
+            </button>
             <button type="button" onClick={onSignOut} className="text-[12.5px] font-semibold text-text-muted">
               Sign out
             </button>
