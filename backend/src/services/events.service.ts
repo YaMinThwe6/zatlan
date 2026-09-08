@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import type { EventSummary, UpcomingEvent, NearbyEvent, EventDetail } from "@binj/shared-types";
+import type { EventSummary, UpcomingEvent, NearbyEvent, EventDetail, EventJoinRequest } from "@binj/shared-types";
 import { requireDb } from "../lib/firebaseAdmin.js";
 import { writeNotification } from "../lib/notify.js";
 import { AppError } from "../utils/AppError.js";
@@ -349,7 +349,7 @@ export async function leaveEvent(uid: string, eventId: string): Promise<void> {
 }
 
 // GET /events/:eventId/joinRequests — host-only (hld.md §7's reused §3 ownership check).
-export async function listJoinRequests(uid: string, eventId: string) {
+export async function listJoinRequests(uid: string, eventId: string): Promise<{ items: EventJoinRequest[] }> {
   const db = requireDb();
   const eventSnap = await db.collection("events").doc(eventId).get();
   if (!eventSnap.exists) {

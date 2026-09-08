@@ -69,6 +69,15 @@ export interface EventDetail extends UpcomingEvent {
   viewerStatus: 'host' | 'joined' | 'pending' | 'none'
 }
 
+// GET /events/:eventId/joinRequests item — host-only (events.service.ts's
+// listJoinRequests checks hostId === caller). One row per person awaiting
+// approval on an approval-required event, for the host's own event detail
+// page to render Approve/Deny against.
+export interface EventJoinRequest {
+  uid: string
+  displayName: string
+}
+
 // POST /events request body — hld.md §7 "Create Event", api-contracts.md §8.
 // `location` is required only for mode: 'in-person' (events.service.ts's
 // createEvent rejects an in-person event without one); ignored for 'online'.

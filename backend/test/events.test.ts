@@ -450,6 +450,16 @@ describe("join request approval", () => {
     expect(res.status).toBe(403);
   });
 
+  it("GET joinRequests returns each pending requester's uid and displayName, for the host to approve/deny against", async () => {
+    store.set("events/evt-1", { hostId: "host-1", movieId: "movie-1" });
+    store.set("events/evt-1/joinRequests/guest-1", { createdAt: new Date() });
+    store.set("users/guest-1", { displayName: "Meera" });
+    const app = createApp(); // currentUid stays "host-1"
+    const res = await authed(app, "get", "/events/evt-1/joinRequests");
+    expect(res.status).toBe(200);
+    expect(res.body.data.items).toEqual([{ uid: "guest-1", displayName: "Meera" }]);
+  });
+
   it("approve moves the pending request into participants and increments the count", async () => {
     store.set("events/evt-1", { hostId: "host-1", movieId: "movie-1", participantCount: 1, participantLimit: 5, roomId: "room-1" });
     store.set("events/evt-1/joinRequests/guest-1", { createdAt: new Date() });

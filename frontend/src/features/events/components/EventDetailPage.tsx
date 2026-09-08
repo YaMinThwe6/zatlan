@@ -1,7 +1,17 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import type { Me } from '../../../lib/api'
-import { getEvent, joinEvent, leaveEvent, deleteEvent, type EventDetail } from '../../home/services/homeApi'
+import {
+  getEvent,
+  joinEvent,
+  leaveEvent,
+  deleteEvent,
+  getJoinRequests,
+  approveJoinRequest,
+  denyJoinRequest,
+  type EventDetail,
+  type EventJoinRequest
+} from '../../home/services/homeApi'
 import { posterUrl } from '../../../lib/images'
 import { formatEventDate } from '../../../lib/eventDate'
 import { Sidebar } from '../../../components/Sidebar'
@@ -24,6 +34,15 @@ export function EventDetailPage({ me }: Props) {
   const [viewerStatus, setViewerStatus] = useState<EventDetail['viewerStatus'] | null>(null)
   const [actionError, setActionError] = useState('')
   const [deleting, setDeleting] = useState(false)
+  // The gap this closes: the backend has always had GET/approve/deny
+  // endpoints for join requests (events.service.ts), but nothing in the
+  // frontend ever called them — a host had no way to act on a request
+  // through the UI at all.
+  const [joinRequests, setJoinRequests] = useState<EventJoinRequest[]>([])
+  // Per-request guard against a rapid double-click firing two overlapping
+  // approve/deny calls for the same requester, same pattern used elsewhere
+  // in the app (e.g. onboarding's WatchedStep).
+  const [actingOn, setActingOn] = useState<Set<string>>(new Set())
 
   useEffect(() => {
     if (!eventId) return
@@ -33,6 +52,18 @@ export function EventDetailPage({ me }: Props) {
         if (cancelled) return
         setEvent(res)
         setViewerStatus(res.viewerStatus)
+        // Only the host can even see these (backend 403s anyone else), and
+        // an event that never requires approval can never have any.
+        if (res.viewerStatus === 'host' && res.requiresApproval) {
+          getJoinRequests(eventId)
+            .then((r) => {
+              if (!cancelled) setJoinRequests(r.items)
+            })
+            .catch(() => {
+              // A minor section on a page that already loaded successfully —
+              // not worth blocking or erroring the whole page over.
+            })
+        }
       })
       .catch((err) => {
         if (!cancelled) setError(err instanceof Error ? err.message : 'Failed to load this event')
@@ -44,6 +75,43 @@ export function EventDetailPage({ me }: Props) {
       cancelled = true
     }
   }, [eventId])
+
+  async function handleApprove(requesterUid: string) {
+    if (!eventId || actingOn.has(requesterUid)) return
+    setActionError('')
+    setActingOn((prev) => new Set(prev).add(requesterUid))
+    try {
+      await approveJoinRequest(eventId, requesterUid)
+      setJoinRequests((prev) => prev.filter((r) => r.uid !== requesterUid))
+      setEvent((prev) => (prev ? { ...prev, participantCount: prev.participantCount + 1 } : prev))
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : 'Failed to approve this request')
+    } finally {
+      setActingOn((prev) => {
+        const next = new Set(prev)
+        next.delete(requesterUid)
+        return next
+      })
+    }
+  }
+
+  async function handleDeny(requesterUid: string) {
+    if (!eventId || actingOn.has(requesterUid)) return
+    setActionError('')
+    setActingOn((prev) => new Set(prev).add(requesterUid))
+    try {
+      await denyJoinRequest(eventId, requesterUid)
+      setJoinRequests((prev) => prev.filter((r) => r.uid !== requesterUid))
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : 'Failed to deny this request')
+    } finally {
+      setActingOn((prev) => {
+        const next = new Set(prev)
+        next.delete(requesterUid)
+        return next
+      })
+    }
+  }
 
   async function handleJoin() {
     if (!eventId) return
@@ -139,6 +207,39 @@ export function EventDetailPage({ me }: Props) {
                   {event.requiresApproval ? ' · requires host approval' : ''}
                 </div>
               </div>
+
+              {viewerStatus === 'host' && joinRequests.length > 0 && (
+                <div className="flex flex-col gap-3 rounded-2xl border border-border-soft bg-surface p-4">
+                  <h2 className="text-[13px] font-bold text-text">
+                    Join requests <span className="text-text-muted">({joinRequests.length})</span>
+                  </h2>
+                  <ul className="flex flex-col gap-2.5">
+                    {joinRequests.map((request) => (
+                      <li key={request.uid} className="flex items-center justify-between gap-2.5">
+                        <span className="min-w-0 truncate text-[13px] text-text">{request.displayName}</span>
+                        <div className="flex flex-none gap-2">
+                          <button
+                            type="button"
+                            disabled={actingOn.has(request.uid)}
+                            onClick={() => handleApprove(request.uid)}
+                            className="rounded-lg bg-accent px-3 py-1.5 text-[11.5px] font-bold text-bg disabled:opacity-60"
+                          >
+                            Approve
+                          </button>
+                          <button
+                            type="button"
+                            disabled={actingOn.has(request.uid)}
+                            onClick={() => handleDeny(request.uid)}
+                            className="rounded-lg border border-border px-3 py-1.5 text-[11.5px] font-bold text-text disabled:opacity-60"
+                          >
+                            Deny
+                          </button>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
 
               {actionError && (
                 <p role="alert" className="text-[13px] text-red-400">

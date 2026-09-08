@@ -6,7 +6,18 @@ const getEvent = vi.fn()
 const joinEvent = vi.fn()
 const leaveEvent = vi.fn()
 const deleteEvent = vi.fn()
-vi.mock('../../../../src/features/home/services/homeApi', () => ({ getEvent, joinEvent, leaveEvent, deleteEvent }))
+const getJoinRequests = vi.fn()
+const approveJoinRequest = vi.fn()
+const denyJoinRequest = vi.fn()
+vi.mock('../../../../src/features/home/services/homeApi', () => ({
+  getEvent,
+  joinEvent,
+  leaveEvent,
+  deleteEvent,
+  getJoinRequests,
+  approveJoinRequest,
+  denyJoinRequest
+}))
 
 const { EventDetailPage } = await import('../../../../src/features/events/components/EventDetailPage')
 
@@ -15,6 +26,9 @@ afterEach(() => {
   joinEvent.mockReset()
   leaveEvent.mockReset()
   deleteEvent.mockReset()
+  getJoinRequests.mockReset()
+  approveJoinRequest.mockReset()
+  denyJoinRequest.mockReset()
   vi.restoreAllMocks()
 })
 
@@ -114,5 +128,84 @@ describe('EventDetailPage', () => {
     renderAt()
 
     expect(await screen.findByRole('alert')).toHaveTextContent('No such event')
+  })
+
+  describe('join requests (host only)', () => {
+    const hostEvent = { ...baseEvent, hostId: 'guest-1', viewerStatus: 'host' as const, requiresApproval: true }
+
+    it("fetches and shows each pending requester, with Approve/Deny — the gap this closes: there was previously no way for a host to act on a request at all", async () => {
+      getEvent.mockResolvedValue(hostEvent)
+      getJoinRequests.mockResolvedValue({ items: [{ uid: 'req-1', displayName: 'Rohan' }] })
+      renderAt()
+
+      await waitFor(() => expect(getJoinRequests).toHaveBeenCalledWith('evt-1'))
+      expect(await screen.findByText('Rohan')).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Approve' })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Deny' })).toBeInTheDocument()
+    })
+
+    it('does not fetch join requests when the event does not require approval', async () => {
+      getEvent.mockResolvedValue({ ...hostEvent, requiresApproval: false })
+      renderAt()
+
+      await screen.findByRole('button', { name: 'Cancel event' })
+      expect(getJoinRequests).not.toHaveBeenCalled()
+    })
+
+    it('does not fetch join requests for a non-host viewer, even on an approval-required event', async () => {
+      getEvent.mockResolvedValue({ ...baseEvent, requiresApproval: true, viewerStatus: 'none' })
+      renderAt()
+
+      await screen.findByRole('button', { name: 'Join event' })
+      expect(getJoinRequests).not.toHaveBeenCalled()
+    })
+
+    it('shows no join-requests section when there are none pending', async () => {
+      getEvent.mockResolvedValue(hostEvent)
+      getJoinRequests.mockResolvedValue({ items: [] })
+      renderAt()
+
+      await waitFor(() => expect(getJoinRequests).toHaveBeenCalled())
+      expect(screen.queryByText(/join request/i)).not.toBeInTheDocument()
+    })
+
+    it('clicking Approve calls approveJoinRequest and removes that requester from the list', async () => {
+      getEvent.mockResolvedValue(hostEvent)
+      getJoinRequests.mockResolvedValue({ items: [{ uid: 'req-1', displayName: 'Rohan' }] })
+      approveJoinRequest.mockResolvedValue(undefined)
+      renderAt()
+
+      await screen.findByText('Rohan')
+      fireEvent.click(screen.getByRole('button', { name: 'Approve' }))
+
+      await waitFor(() => expect(approveJoinRequest).toHaveBeenCalledWith('evt-1', 'req-1'))
+      await waitFor(() => expect(screen.queryByText('Rohan')).not.toBeInTheDocument())
+    })
+
+    it('clicking Deny calls denyJoinRequest and removes that requester from the list', async () => {
+      getEvent.mockResolvedValue(hostEvent)
+      getJoinRequests.mockResolvedValue({ items: [{ uid: 'req-1', displayName: 'Rohan' }] })
+      denyJoinRequest.mockResolvedValue(undefined)
+      renderAt()
+
+      await screen.findByText('Rohan')
+      fireEvent.click(screen.getByRole('button', { name: 'Deny' }))
+
+      await waitFor(() => expect(denyJoinRequest).toHaveBeenCalledWith('evt-1', 'req-1'))
+      await waitFor(() => expect(screen.queryByText('Rohan')).not.toBeInTheDocument())
+    })
+
+    it('shows an error and leaves the request in the list when approving fails', async () => {
+      getEvent.mockResolvedValue(hostEvent)
+      getJoinRequests.mockResolvedValue({ items: [{ uid: 'req-1', displayName: 'Rohan' }] })
+      approveJoinRequest.mockRejectedValue(new Error('This event is at capacity'))
+      renderAt()
+
+      await screen.findByText('Rohan')
+      fireEvent.click(screen.getByRole('button', { name: 'Approve' }))
+
+      expect(await screen.findByRole('alert')).toHaveTextContent('This event is at capacity')
+      expect(screen.getByText('Rohan')).toBeInTheDocument()
+    })
   })
 })

@@ -1,6 +1,6 @@
 import { apiFetch } from '../../../lib/api'
-export type { RecommendationItem, TasteMatch, UpcomingEvent, ActivityItem, Greeting, NotificationItem, NearbyEvent, FriendsRecommendationItem, CreateEventInput, EventSummary, EventDetail } from '@binj/shared-types'
-import type { RecommendationItem, TasteMatch, UpcomingEvent, ActivityItem, Greeting, NotificationItem, NearbyEvent, FriendsRecommendationItem, CreateEventInput, EventSummary, EventDetail } from '@binj/shared-types'
+export type { RecommendationItem, TasteMatch, UpcomingEvent, ActivityItem, Greeting, NotificationItem, NearbyEvent, FriendsRecommendationItem, CreateEventInput, EventSummary, EventDetail, EventJoinRequest } from '@binj/shared-types'
+import type { RecommendationItem, TasteMatch, UpcomingEvent, ActivityItem, Greeting, NotificationItem, NearbyEvent, FriendsRecommendationItem, CreateEventInput, EventSummary, EventDetail, EventJoinRequest } from '@binj/shared-types'
 
 export function getHomeGreeting(): Promise<Greeting> {
   return apiFetch('/home/greeting', { auth: true })
@@ -67,6 +67,20 @@ export function getEvent(eventId: string): Promise<EventDetail> {
 
 export function deleteEvent(eventId: string): Promise<void> {
   return apiFetch(`/events/${encodeURIComponent(eventId)}`, { method: 'DELETE', auth: true })
+}
+
+// Host-only — the event detail page's own "Join requests" section, backend
+// 403s anyone else (events.service.ts's listJoinRequests).
+export function getJoinRequests(eventId: string): Promise<{ items: EventJoinRequest[] }> {
+  return apiFetch(`/events/${encodeURIComponent(eventId)}/joinRequests`, { auth: true })
+}
+
+export function approveJoinRequest(eventId: string, requesterUid: string): Promise<void> {
+  return apiFetch(`/events/${encodeURIComponent(eventId)}/joinRequests/${encodeURIComponent(requesterUid)}/approve`, { method: 'POST', auth: true })
+}
+
+export function denyJoinRequest(eventId: string, requesterUid: string): Promise<void> {
+  return apiFetch(`/events/${encodeURIComponent(eventId)}/joinRequests/${encodeURIComponent(requesterUid)}/deny`, { method: 'POST', auth: true })
 }
 
 export function getNotifications(unreadOnly = false): Promise<{ items: NotificationItem[] }> {
