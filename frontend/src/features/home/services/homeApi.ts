@@ -30,13 +30,19 @@ export function unfollowUser(uid: string): Promise<void> {
   return apiFetch(`/users/${encodeURIComponent(uid)}/follow`, { method: 'DELETE', auth: true })
 }
 
-// No auth — public, reachable by a signed-out guest too (MovieSearch.tsx's
-// Discover teaser). The response never carries exact coordinates either way
-// (backend's listUpcomingEvents), so there's nothing sensitive to gate here.
+// Reachable by a signed-out guest too (MovieSearch.tsx's Discover teaser),
+// so this can't require auth — but a signed-in caller still needs their own
+// joined/pending status back, not a guest's, so it attaches the token
+// whenever one is available. Real bug this fixed: this used to call
+// apiFetch with no auth option at all, so EVERY call — signed in or not —
+// went out with no Authorization header, and joined/pending always came
+// back false regardless of the caller's actual relationship to each event.
+// The response never carries exact coordinates either way (backend's
+// listUpcomingEvents), so there's nothing else sensitive to gate here.
 // `movieId` narrows to one movie's events — MovieDetail's "Watch together"
 // right rail; omitted, this is Home's broader "Upcoming watch events".
 export function getUpcomingEvents(movieId?: string): Promise<{ items: UpcomingEvent[] }> {
-  return apiFetch(`/events/upcoming${movieId ? `?movieId=${encodeURIComponent(movieId)}` : ''}`)
+  return apiFetch(`/events/upcoming${movieId ? `?movieId=${encodeURIComponent(movieId)}` : ''}`, { optionalAuth: true })
 }
 
 export function createEvent(input: CreateEventInput): Promise<EventSummary> {

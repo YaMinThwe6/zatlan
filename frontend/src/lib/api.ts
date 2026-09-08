@@ -12,6 +12,12 @@ interface ApiFetchOptions {
   method?: string
   body?: unknown
   auth?: boolean
+  // Attaches the ID token when there IS a signed-in user, but — unlike
+  // `auth` — never throws or requires one. For an endpoint the backend
+  // itself gates with optionalAuth (currently just GET /events/upcoming):
+  // reachable signed out (a guest teaser), but a signed-in caller should
+  // still get their own joined/pending status back, not a guest's.
+  optionalAuth?: boolean
 }
 
 // The single response envelope every backend endpoint uses (docs/backend-conventions.md
@@ -31,6 +37,9 @@ export async function apiFetch<T>(path: string, options: ApiFetchOptions = {}): 
       throw new Error('Not signed in')
     }
     headers['Authorization'] = `Bearer ${token}`
+  } else if (options.optionalAuth) {
+    const token = await auth.currentUser?.getIdToken()
+    if (token) headers['Authorization'] = `Bearer ${token}`
   }
 
   const res = await fetch(`${API_BASE}${path}`, {
