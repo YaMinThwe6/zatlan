@@ -519,6 +519,17 @@ describe("join request approval", () => {
     expect(store.has("events/evt-1/participants/guest-1")).toBe(false);
   });
 
+  it("deny notifies the requester", async () => {
+    store.set("events/evt-1", { hostId: "host-1", movieId: "movie-1" });
+    store.set("events/evt-1/joinRequests/guest-1", { createdAt: new Date() });
+    const app = createApp();
+    await authed(app, "post", "/events/evt-1/joinRequests/guest-1/deny");
+
+    const notifications = [...store.entries()].filter(([key]) => key.startsWith("users/guest-1/notifications/"));
+    expect(notifications).toHaveLength(1);
+    expect(notifications[0][1]).toMatchObject({ type: "eventJoinDenied", fromUserId: "host-1", targetType: "event", targetId: "evt-1" });
+  });
+
   // Full-stack, one continuous flow through the real HTTP request chain —
   // create, request, list-for-host, approve, then re-verify from the
   // requester's side across a *fresh* request the way a page refresh would.

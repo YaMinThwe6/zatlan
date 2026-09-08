@@ -87,6 +87,21 @@ describe("GET /users/me/notifications", () => {
     expect(res.body.data.items.map((n: { id: string }) => n.id)).toEqual(["n2", "n1"]);
   });
 
+  it("joins in the sender's displayName/photoURL — the notification center needs a name, not just a bare fromUserId", async () => {
+    store.set("users/uid-2", { displayName: "Rohan", photoURL: "/rohan.jpg" });
+    store.set("users/uid-1/notifications/n1", { type: "followRequest", fromUserId: "uid-2", read: false, createdAt: new Date("2026-01-01") });
+    const app = createApp();
+    const res = await request(app).get("/users/me/notifications").set("Authorization", "Bearer good");
+    expect(res.body.data.items[0]).toMatchObject({ fromUserDisplayName: "Rohan", fromUserPhotoURL: "/rohan.jpg" });
+  });
+
+  it("leaves fromUserDisplayName/fromUserPhotoURL null when a notification has no fromUserId", async () => {
+    store.set("users/uid-1/notifications/n1", { type: "moderationWarning", fromUserId: null, read: false, createdAt: new Date("2026-01-01") });
+    const app = createApp();
+    const res = await request(app).get("/users/me/notifications").set("Authorization", "Bearer good");
+    expect(res.body.data.items[0]).toMatchObject({ fromUserDisplayName: null, fromUserPhotoURL: null });
+  });
+
   it("filters to unread only when unreadOnly=true", async () => {
     store.set("users/uid-1/notifications/n1", { type: "followRequest", fromUserId: "uid-2", read: false, createdAt: new Date("2026-01-01") });
     store.set("users/uid-1/notifications/n2", { type: "eventJoinApproved", fromUserId: "uid-3", read: true, createdAt: new Date("2026-01-02") });

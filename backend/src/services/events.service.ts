@@ -417,6 +417,7 @@ export async function denyJoinRequest(uid: string, eventId: string, requesterUid
     throw new AppError("FORBIDDEN", "Only the host can deny join requests", 403);
   }
   await db.collection("events").doc(eventId).collection("joinRequests").doc(requesterUid).delete();
+  await writeNotification(requesterUid, "eventJoinDenied", uid, "event", eventId);
 }
 
 // GET /events/nearby — hld.md §9. Firestore has no native radius query, so
