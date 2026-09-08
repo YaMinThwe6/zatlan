@@ -1,6 +1,6 @@
 import type { Request, Response } from "express";
 import { Responder } from "../utils/responder.js";
-import { getOrCreateUser, isUsernameAvailable, updateUser, getPublicProfile } from "../services/users.service.js";
+import { getOrCreateUser, isUsernameAvailable, updateUser, getPublicProfile, getUserReviews as listUserReviews } from "../services/users.service.js";
 
 export async function getMe(req: Request, res: Response): Promise<void> {
   const uid = req.uid!;
@@ -13,6 +13,12 @@ export async function getUserProfile(req: Request, res: Response): Promise<void>
   const callerUid = req.uid!;
   const profile = await getPublicProfile(callerUid, req.params.uid);
   Responder.success(res, profile);
+}
+
+export async function getUserReviews(req: Request, res: Response): Promise<void> {
+  const callerUid = req.uid!;
+  const result = await listUserReviews(callerUid, req.params.uid);
+  Responder.success(res, result);
 }
 
 export async function checkUsernameAvailable(req: Request, res: Response): Promise<void> {
