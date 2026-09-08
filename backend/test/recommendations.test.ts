@@ -26,20 +26,26 @@ function directChildren(path: string) {
 function makeCollectionRef(path: string) {
   function query(state: {
     whereField?: string;
+    whereOp?: string;
     whereValues?: string[];
     orderField?: string;
     dir?: "asc" | "desc";
     lim?: number;
   }) {
     return {
-      where: (field: string, _op: string, values: string[]) => query({ ...state, whereField: field, whereValues: values }),
+      where: (field: string, op: string, values: string | string[]) =>
+        query({ ...state, whereField: field, whereOp: op, whereValues: Array.isArray(values) ? values : [values] }),
       orderBy: (field: string, dir: "asc" | "desc" = "asc") => query({ ...state, orderField: field, dir }),
       limit: (n: number) => query({ ...state, lim: n }),
       get: async () => {
         let entries = directChildren(path);
         if (state.whereField && state.whereValues) {
           entries = entries.filter(([, data]) => {
-            const arr = (data[state.whereField!] as string[] | undefined) ?? [];
+            const value = data[state.whereField!];
+            if (state.whereOp === "in") {
+              return state.whereValues!.includes(value as string);
+            }
+            const arr = (value as string[] | undefined) ?? [];
             return arr.some((v) => state.whereValues!.includes(v));
           });
         }
@@ -142,6 +148,35 @@ describe("GET /recommendations", () => {
     const notebook = preferredRes.body.data.items.find((m: { movieId: string }) => m.movieId === "notebook");
     expect(notebook.matchScore).toBeGreaterThan(0);
     expect(notebook.matchScore).toBeLessThanOrEqual(100);
+  });
+
+  // Real reported bug: Home's "Top picks for you" showed the same
+  // English-language bias onboarding's watched-candidates had — because this
+  // never looked at preferredLanguages (saved during onboarding) at all,
+  // only genres+voteAverage. The local index skews English, so a genre-first
+  // top-CANDIDATE_POOL slice can bury a real match in a narrower language
+  // someone actually picked.
+  it("prioritizes preferredLanguages over genre when both are set — same local-index English-skew fix as onboarding's watched-candidates", async () => {
+    for (let i = 0; i < 30; i++) {
+      store.set(`movies/decoy${i}`, { title: `Decoy ${i}`, genres: ["Sci-Fi"], originalLanguage: "en", voteAverage: 9.0 });
+    }
+    store.set("movies/enthiran", { title: "Enthiran", genres: ["Sci-Fi"], originalLanguage: "ta", voteAverage: 7.0 });
+    store.set("users/uid-1", { favoriteGenres: ["Sci-Fi"], preferredLanguages: ["ta"] });
+
+    const app = createApp();
+    const res = await req(app);
+
+    expect(res.body.data.items.map((m: { movieId: string }) => m.movieId)).toEqual(["enthiran"]);
+  });
+
+  it("uses preferredLanguages alone when there's no genre signal at all", async () => {
+    store.set("movies/ta-movie", { title: "Tamil Movie", genres: ["Drama"], originalLanguage: "ta", voteAverage: 6.0 });
+    store.set("users/uid-1", { favoriteGenres: null, preferredLanguages: ["ta"] });
+
+    const app = createApp();
+    const res = await req(app);
+
+    expect(res.body.data.items.map((m: { movieId: string }) => m.movieId)).toEqual(["ta-movie"]);
   });
 
   it("excludes movies already watched or watchlisted", async () => {

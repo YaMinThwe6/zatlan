@@ -71,8 +71,28 @@ export async function getRecommendations(uid: string): Promise<{ items: Recommen
     preferredGenres = ((userSnap.data()?.favoriteGenres as string[] | null) ?? []).slice(0, MAX_GENRES);
   }
 
+  // Independent of the genre-derivation branch above (watch history vs
+  // favoriteGenres) — preferredLanguages has no "derive from watch history"
+  // equivalent yet, it's just the flat onboarding pick.
+  const preferredLanguages = ((userSnap.data()?.preferredLanguages as string[] | null) ?? []).slice(0, MAX_GENRES);
+
   let candidates: FirebaseFirestore.QuerySnapshot;
-  if (preferredGenres.length > 0) {
+  // Language-primary when a language preference exists, even alongside a
+  // genre signal — real reported bug: "Top picks for you" used to ignore
+  // preferredLanguages entirely, and the local "movies" collection skews
+  // toward whatever's been searched/opened most (in practice, English), so a
+  // genre-first top-CANDIDATE_POOL-by-voteAverage slice could easily contain
+  // zero matches for someone who picked a narrower language, even when the
+  // collection has plenty — just not within that slice. Same fix as
+  // onboarding.service.ts's watched-candidates query.
+  if (preferredLanguages.length > 0) {
+    candidates = await db
+      .collection("movies")
+      .where("originalLanguage", "in", preferredLanguages)
+      .orderBy("voteAverage", "desc")
+      .limit(CANDIDATE_POOL)
+      .get();
+  } else if (preferredGenres.length > 0) {
     candidates = await db
       .collection("movies")
       .where("genres", "array-contains-any", preferredGenres)
@@ -80,14 +100,19 @@ export async function getRecommendations(uid: string): Promise<{ items: Recommen
       .limit(CANDIDATE_POOL)
       .get();
   } else {
-    // True cold start — no watch history and no favoriteGenres — trending fallback.
+    // True cold start — no watch history, no favoriteGenres, no preferredLanguages — trending fallback.
     candidates = await db.collection("movies").orderBy("voteAverage", "desc").limit(CANDIDATE_POOL).get();
   }
 
-  const items = candidates.docs
-    .filter((d) => !excludeIds.has(d.id))
-    .slice(0, RESULT_LIMIT)
-    .map((d) => toSummary(d.id, d.data(), preferredGenres));
+  let filtered = candidates.docs.filter((d) => !excludeIds.has(d.id));
+  // When both were given, the genre filter is applied in-app on top of the
+  // language-primary query above — Firestore can't combine an `in` filter
+  // with array-contains-any on a different field in one query.
+  if (preferredLanguages.length > 0 && preferredGenres.length > 0) {
+    filtered = filtered.filter((d) => ((d.data().genres as string[] | undefined) ?? []).some((g) => preferredGenres.includes(g)));
+  }
+
+  const items = filtered.slice(0, RESULT_LIMIT).map((d) => toSummary(d.id, d.data(), preferredGenres));
 
   return { items };
 }
