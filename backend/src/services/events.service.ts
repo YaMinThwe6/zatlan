@@ -580,6 +580,94 @@ export async function listHostedEvents(uid: string): Promise<{ items: UpcomingEv
   return { items };
 }
 
+// Shared by listJoinedEvents/listRequestedEvents below — participants and
+// joinRequests docs don't carry a separate uid field (the doc id already is
+// the uid), same tradeoff/pattern users.service.ts's getReviewCount/
+// getUserReviews use for the identical "find every X across a whole
+// subcollection type" problem. Bounded by the app's total event volume, not
+// the caller's own — fine at this app's current scale, same note as there.
+async function findEventsByCollectionGroup(
+  db: FirebaseFirestore.Firestore,
+  collectionName: "participants" | "joinRequests",
+  callerUid: string
+): Promise<{ id: string; data: FirebaseFirestore.DocumentData }[]> {
+  const snap = await db.collectionGroup(collectionName).get();
+  const mine = snap.docs.filter((d) => d.id === callerUid);
+  const events = await Promise.all(
+    mine.map(async (d) => {
+      const eventId = d.ref.parent.parent!.id;
+      const eventSnap = await db.collection("events").doc(eventId).get();
+      return eventSnap.exists ? { id: eventSnap.id, data: eventSnap.data()! } : null;
+    })
+  );
+  return events.filter((e): e is { id: string; data: FirebaseFirestore.DocumentData } => e !== null && e.data.deleted !== true);
+}
+
+async function toJoinedEventSummary(
+  db: FirebaseFirestore.Firestore,
+  id: string,
+  data: FirebaseFirestore.DocumentData,
+  joined: boolean,
+  pending: boolean
+): Promise<UpcomingEvent> {
+  const [movieSnap, hostDisplayName] = await Promise.all([
+    db.collection("movies").doc(data.movieId).get(),
+    getHostDisplayName(db, data.hostId)
+  ]);
+  return {
+    // A participant sees the exact spot; someone with only a pending
+    // request hasn't joined yet, same pre-join privacy rule as everywhere
+    // else in this file.
+    ...toEventSummary(id, data, joined, joined, pending),
+    movieTitle: movieSnap.data()?.title ?? null,
+    moviePoster: movieSnap.data()?.poster ?? null,
+    hostDisplayName
+  };
+}
+
+// GET /events/joined?when=future|past — Profile page's Events tab, two of
+// its four sections ("Hosting" reuses listHostedEvents above; "Requested"
+// is listRequestedEvents below). Excludes events the caller hosts — hosts
+// auto-join their own event, which would otherwise duplicate the Hosting
+// section here.
+export async function listJoinedEvents(callerUid: string, rawWhen: unknown): Promise<{ items: UpcomingEvent[] }> {
+  if (rawWhen !== "future" && rawWhen !== "past") {
+    throw new AppError("INVALID_QUERY", "when must be 'future' or 'past'", 400);
+  }
+  const db = requireDb();
+  const found = await findEventsByCollectionGroup(db, "participants", callerUid);
+  const now = Date.now();
+
+  const filtered = found
+    .filter(({ data }) => data.hostId !== callerUid)
+    .filter(({ data }) => {
+      const dt = data.datetime;
+      const millis = dt instanceof Date ? dt.getTime() : dt?.toDate?.().getTime();
+      return typeof millis === "number" && (rawWhen === "future" ? millis >= now : millis < now);
+    })
+    .sort((a, b) => {
+      const am = (a.data.datetime instanceof Date ? a.data.datetime : a.data.datetime?.toDate?.())?.getTime() ?? 0;
+      const bm = (b.data.datetime instanceof Date ? b.data.datetime : b.data.datetime?.toDate?.())?.getTime() ?? 0;
+      // Future: soonest first. Past: most recently happened first.
+      return rawWhen === "future" ? am - bm : bm - am;
+    });
+
+  const items = await Promise.all(filtered.map(({ id, data }) => toJoinedEventSummary(db, id, data, true, false)));
+  return { items };
+}
+
+// GET /events/requested — Profile page's Events tab's fourth section.
+// Excludes anything already approved (a joinRequests doc left behind after
+// approval would otherwise double-list it — approveJoinRequest already
+// deletes it, but this stays a real filter rather than trusting that
+// invariant blindly).
+export async function listRequestedEvents(callerUid: string): Promise<{ items: UpcomingEvent[] }> {
+  const db = requireDb();
+  const found = await findEventsByCollectionGroup(db, "joinRequests", callerUid);
+  const items = await Promise.all(found.map(({ id, data }) => toJoinedEventSummary(db, id, data, false, true)));
+  return { items };
+}
+
 // DELETE /events/:eventId — hld.md §21's general edit/delete pattern: author
 // (the host) only. No moderator branch — §14's role system was never built
 // (superseded by full-autonomy AI moderation, see hld.md §14), same reason

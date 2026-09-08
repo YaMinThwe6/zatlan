@@ -6,6 +6,8 @@ import {
   getUpcomingEvents,
   getNearbyEvents,
   getHostedEvents,
+  getJoinedEvents,
+  getRequestedEvents,
   putJoinEvent,
   deleteJoinEvent,
   getJoinRequests,
@@ -29,6 +31,10 @@ eventsRouter.get("/events/nearby", requireAuth, asyncHandler(getNearbyEvents));
 // "upcoming"/"nearby" — a literal path segment has to be registered before
 // any param route that would otherwise swallow it as :eventId.
 eventsRouter.get("/events/hosting", requireAuth, asyncHandler(getHostedEvents));
+// Profile page's Events tab — the other two of its four sections (Hosting
+// reuses /events/hosting above).
+eventsRouter.get("/events/joined", requireAuth, asyncHandler(getJoinedEvents));
+eventsRouter.get("/events/requested", requireAuth, asyncHandler(getRequestedEvents));
 eventsRouter.put("/events/:eventId/join", requireAuth, asyncHandler(putJoinEvent));
 eventsRouter.delete("/events/:eventId/join", requireAuth, asyncHandler(deleteJoinEvent));
 eventsRouter.get("/events/:eventId/joinRequests", requireAuth, asyncHandler(getJoinRequests));

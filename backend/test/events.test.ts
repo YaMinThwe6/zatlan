@@ -112,8 +112,35 @@ function makeBatch() {
   return batch;
 }
 
+// Firestore's collectionGroup(id) — every doc across the whole store whose
+// immediate parent collection is named `name`, regardless of depth (mirrors
+// events/{eventId}/participants/{uid} and events/{eventId}/joinRequests/{uid}
+// for listJoinedEvents/listRequestedEvents below). Docs carry
+// `ref.parent.parent.id` — the grandparent doc's id (the event) — same
+// shape a real QueryDocumentSnapshot exposes, matching users.test.ts's own
+// collectionGroup mock for the identical need there.
+function collectionGroupRef(name: string) {
+  const entries = [...store.entries()].filter(([key]) => {
+    const segments = key.split("/");
+    return segments[segments.length - 2] === name;
+  });
+  return {
+    get: async () => ({
+      docs: entries.map(([key, data]) => {
+        const segments = key.split("/");
+        return {
+          id: segments[segments.length - 1],
+          data: () => data,
+          ref: { parent: { parent: { id: segments[segments.length - 3] } } }
+        };
+      })
+    })
+  };
+}
+
 const db = {
   collection: (name: string) => collectionRef(name),
+  collectionGroup: (name: string) => collectionGroupRef(name),
   batch: () => makeBatch(),
   runTransaction: async (fn: (tx: unknown) => Promise<unknown>) => {
     const tx = {
@@ -778,6 +805,107 @@ describe("GET /events/hosting", () => {
     const app = createApp();
     const res = await authed(app, "get", "/events/hosting");
     expect(res.body.data.items[0].hostDisplayName).toBe("Meera");
+  });
+});
+
+// Profile page's Events tab — two of its four sections (Hosting reuses
+// /events/hosting above; Requested is its own describe block below).
+// Same collectionGroup-scan-filtered-by-doc-id pattern as
+// users.service.ts's getReviewCount/getUserReviews — participants/
+// joinRequests docs don't carry a separate uid field, the doc id already
+// is the uid.
+describe("GET /events/joined", () => {
+  it("401s without a token", async () => {
+    const app = createApp();
+    const res = await request(app).get("/events/joined?when=future");
+    expect(res.status).toBe(401);
+  });
+
+  it("400s on an invalid when value", async () => {
+    const app = createApp();
+    const res = await authed(app, "get", "/events/joined?when=whenever");
+    expect(res.status).toBe(400);
+  });
+
+  it("returns future events the caller has joined, soonest first", async () => {
+    store.set("events/soon", { hostId: "host-2", movieId: "movie-1", visibility: "public", datetime: new Date("2099-06-01"), participantCount: 2, participantLimit: 5, requiresApproval: false, roomId: "room-1" });
+    store.set("events/later", { hostId: "host-2", movieId: "movie-1", visibility: "public", datetime: new Date("2099-12-01"), participantCount: 2, participantLimit: 5, requiresApproval: false, roomId: "room-2" });
+    store.set("events/soon/participants/host-1", { joinedAt: new Date() });
+    store.set("events/later/participants/host-1", { joinedAt: new Date() });
+    const app = createApp(); // currentUid stays "host-1"
+    const res = await authed(app, "get", "/events/joined?when=future");
+    expect(res.status).toBe(200);
+    expect(res.body.data.items.map((e: { eventId: string }) => e.eventId)).toEqual(["soon", "later"]);
+    expect(res.body.data.items[0]).toMatchObject({ joined: true, pending: false });
+  });
+
+  it("returns past events the caller has joined, most recent first", async () => {
+    store.set("events/older", { hostId: "host-2", movieId: "movie-1", visibility: "public", datetime: new Date("2020-01-01"), participantCount: 2, participantLimit: 5, requiresApproval: false, roomId: "room-1" });
+    store.set("events/recent", { hostId: "host-2", movieId: "movie-1", visibility: "public", datetime: new Date("2021-01-01"), participantCount: 2, participantLimit: 5, requiresApproval: false, roomId: "room-2" });
+    store.set("events/older/participants/host-1", { joinedAt: new Date() });
+    store.set("events/recent/participants/host-1", { joinedAt: new Date() });
+    const app = createApp();
+    const res = await authed(app, "get", "/events/joined?when=past");
+    expect(res.body.data.items.map((e: { eventId: string }) => e.eventId)).toEqual(["recent", "older"]);
+  });
+
+  it("excludes events the caller hosts — that's the separate Hosting section", async () => {
+    store.set("events/own", { hostId: "host-1", movieId: "movie-1", visibility: "public", datetime: new Date("2099-06-01"), participantCount: 1, participantLimit: 5, requiresApproval: false });
+    store.set("events/own/participants/host-1", { joinedAt: new Date() });
+    const app = createApp();
+    const res = await authed(app, "get", "/events/joined?when=future");
+    expect(res.body.data.items).toEqual([]);
+  });
+
+  it("excludes a soft-deleted event", async () => {
+    store.set("events/evt-1", { hostId: "host-2", movieId: "movie-1", visibility: "public", datetime: new Date("2099-06-01"), deleted: true, participantCount: 1, participantLimit: 5, requiresApproval: false });
+    store.set("events/evt-1/participants/host-1", { joinedAt: new Date() });
+    const app = createApp();
+    const res = await authed(app, "get", "/events/joined?when=future");
+    expect(res.body.data.items).toEqual([]);
+  });
+
+  it("joins movie and host details into each item", async () => {
+    store.set("users/host-2", { displayName: "Meera" });
+    store.set("events/evt-1", { hostId: "host-2", movieId: "movie-1", visibility: "public", datetime: new Date("2099-06-01"), participantCount: 2, participantLimit: 5, requiresApproval: false });
+    store.set("events/evt-1/participants/host-1", { joinedAt: new Date() });
+    const app = createApp();
+    const res = await authed(app, "get", "/events/joined?when=future");
+    expect(res.body.data.items[0]).toMatchObject({ movieTitle: "Dune: Part Two", hostDisplayName: "Meera" });
+  });
+});
+
+describe("GET /events/requested", () => {
+  it("401s without a token", async () => {
+    const app = createApp();
+    const res = await request(app).get("/events/requested");
+    expect(res.status).toBe(401);
+  });
+
+  it("returns events the caller has an outstanding join request on", async () => {
+    store.set("events/evt-1", { hostId: "host-2", movieId: "movie-1", visibility: "public", datetime: new Date("2099-06-01"), participantCount: 1, participantLimit: 5, requiresApproval: true });
+    store.set("events/evt-1/joinRequests/host-1", { createdAt: new Date() });
+    const app = createApp();
+    const res = await authed(app, "get", "/events/requested");
+    expect(res.status).toBe(200);
+    expect(res.body.data.items.map((e: { eventId: string }) => e.eventId)).toEqual(["evt-1"]);
+    expect(res.body.data.items[0]).toMatchObject({ joined: false, pending: true });
+  });
+
+  it("excludes a request that's already been approved (participant now, no longer just a request)", async () => {
+    store.set("events/evt-1", { hostId: "host-2", movieId: "movie-1", visibility: "public", datetime: new Date("2099-06-01"), participantCount: 2, participantLimit: 5, requiresApproval: true });
+    store.set("events/evt-1/participants/host-1", { joinedAt: new Date() });
+    const app = createApp();
+    const res = await authed(app, "get", "/events/requested");
+    expect(res.body.data.items).toEqual([]);
+  });
+
+  it("excludes a soft-deleted event", async () => {
+    store.set("events/evt-1", { hostId: "host-2", movieId: "movie-1", visibility: "public", datetime: new Date("2099-06-01"), deleted: true, participantCount: 1, participantLimit: 5, requiresApproval: true });
+    store.set("events/evt-1/joinRequests/host-1", { createdAt: new Date() });
+    const app = createApp();
+    const res = await authed(app, "get", "/events/requested");
+    expect(res.body.data.items).toEqual([]);
   });
 });
 

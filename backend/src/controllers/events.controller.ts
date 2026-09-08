@@ -22,6 +22,16 @@ export async function getHostedEvents(req: Request, res: Response): Promise<void
   Responder.success(res, result);
 }
 
+export async function getJoinedEvents(req: Request, res: Response): Promise<void> {
+  const result = await eventsService.listJoinedEvents(req.uid!, req.query.when);
+  Responder.success(res, result);
+}
+
+export async function getRequestedEvents(req: Request, res: Response): Promise<void> {
+  const result = await eventsService.listRequestedEvents(req.uid!);
+  Responder.success(res, result);
+}
+
 export async function putJoinEvent(req: Request, res: Response): Promise<void> {
   const result = await eventsService.joinEvent(req.uid!, req.params.eventId);
   Responder.success(res, result);
