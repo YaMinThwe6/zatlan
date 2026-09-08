@@ -10,12 +10,15 @@ const unsubscribe = vi.fn()
 const reportContent = vi.fn()
 const getMe = vi.fn()
 const getNotifications = vi.fn()
+const markNotificationRead = vi.fn()
+const clearAllNotifications = vi.fn()
 
 vi.mock('../../../../src/features/chat/services/roomApi', () => ({ getRoom, sendMessage, deleteMessage, subscribeToMessages }))
 vi.mock('../../../../src/lib/api', () => ({ reportContent, getMe }))
-// AppHeader's own dependencies — it's now part of RoomChat's shared shell
-// (Sidebar/AppHeader/MobileTabBar on every signed-in page).
-vi.mock('../../../../src/features/home/services/homeApi', () => ({ getNotifications }))
+// AppHeader's own dependencies (via its NotificationBell) — it's now part of
+// RoomChat's shared shell (Sidebar/AppHeader/MobileTabBar on every signed-in
+// page).
+vi.mock('../../../../src/features/home/services/homeApi', () => ({ getNotifications, markNotificationRead, clearAllNotifications }))
 vi.mock('../../../../src/lib/AuthContext', () => ({
   useAuth: () => ({
     user: { uid: 'uid-1' },
@@ -71,8 +74,14 @@ function mockSubscription(msgs: typeof messages) {
 
 // Seeds two history entries so the "Back" button's navigate(-1) has
 // somewhere real to go — a bare single-entry history can't go back further.
-function renderWithRouter() {
-  return render(
+// Awaits the shared shell's own async chain settling (AppHeader awaits
+// getMe before its NotificationBell child even mounts, which then awaits
+// getNotifications) before returning — otherwise that chain can still be
+// in flight when the test ends, firing after afterEach resets the mocks
+// and throwing on a now-unconfigured one, intermittently breaking whichever
+// test happens to be running when it lands.
+async function renderWithRouter() {
+  const result = render(
     <MemoryRouter initialEntries={['/', '/rooms/room-1']} initialIndex={1}>
       <Routes>
         <Route path="/" element={<p>Previous page</p>} />
@@ -80,12 +89,14 @@ function renderWithRouter() {
       </Routes>
     </MemoryRouter>
   )
+  await waitFor(() => expect(getNotifications).toHaveBeenCalled())
+  return result
 }
 
 describe('RoomChat', () => {
-  it('subscribes to the room on mount and renders non-deleted messages', () => {
+  it('subscribes to the room on mount and renders non-deleted messages', async () => {
     mockSubscription(messages)
-    renderWithRouter()
+    await renderWithRouter()
 
     expect(subscribeToMessages).toHaveBeenCalledWith('room-1', expect.any(Function))
     expect(screen.getByText('Hey everyone!')).toBeInTheDocument()
@@ -95,7 +106,7 @@ describe('RoomChat', () => {
 
   it("shows the event's title as the page heading, not the generic 'Room chat'", async () => {
     mockSubscription(messages)
-    renderWithRouter()
+    await renderWithRouter()
 
     expect(await screen.findByRole('heading', { name: 'Rooftop watch' })).toBeInTheDocument()
     expect(screen.queryByText('Room chat')).not.toBeInTheDocument()
@@ -103,7 +114,7 @@ describe('RoomChat', () => {
 
   it("labels each other member's message with their display name", async () => {
     mockSubscription(messages)
-    renderWithRouter()
+    await renderWithRouter()
 
     // m2 is from uid-2 (Rohan). "Arjun" (the caller, uid-1) legitimately
     // appears elsewhere on the page (AppHeader's own identity), so this
@@ -113,9 +124,9 @@ describe('RoomChat', () => {
     expect(rohanLabel.closest('li')).toHaveTextContent('On my way')
   })
 
-  it('unsubscribes on unmount', () => {
+  it('unsubscribes on unmount', async () => {
     mockSubscription(messages)
-    const { unmount } = renderWithRouter()
+    const { unmount } = await renderWithRouter()
     unmount()
     expect(unsubscribe).toHaveBeenCalled()
   })
@@ -142,6 +153,7 @@ describe('RoomChat', () => {
       </MemoryRouter>
     )
     expect(subscribeToMessages).toHaveBeenCalledWith('room-1', expect.any(Function))
+    await waitFor(() => expect(getNotifications).toHaveBeenCalled())
 
     fireEvent.click(screen.getByText('Go to room 2'))
 
@@ -152,7 +164,12 @@ describe('RoomChat', () => {
   it('sends a message and clears the draft', async () => {
     mockSubscription(messages)
     sendMessage.mockResolvedValue({ messageId: 'm4', createdAt: '2026-01-01T20:03:00.000Z' })
-    renderWithRouter()
+    await renderWithRouter()
+    // Lets the shared shell's own async chain settle first (AppHeader awaits
+    // getMe before its NotificationBell child even mounts, which then awaits
+    // getNotifications) — otherwise it can fire after this test ends and its
+    // afterEach resets the mocks, throwing on a now-unconfigured mock.
+    await waitFor(() => expect(getNotifications).toHaveBeenCalled())
 
     fireEvent.change(screen.getByLabelText(/message/i), { target: { value: 'Starting now!' } })
     fireEvent.click(screen.getByRole('button', { name: /^send$/i }))
@@ -164,7 +181,7 @@ describe('RoomChat', () => {
   it('shows an error and keeps the draft when sending fails', async () => {
     mockSubscription(messages)
     sendMessage.mockRejectedValue(new Error('network error'))
-    renderWithRouter()
+    await renderWithRouter()
 
     fireEvent.change(screen.getByLabelText(/message/i), { target: { value: 'oops' } })
     fireEvent.click(screen.getByRole('button', { name: /^send$/i }))
@@ -173,9 +190,9 @@ describe('RoomChat', () => {
     expect(screen.getByLabelText(/message/i)).toHaveValue('oops')
   })
 
-  it('only offers Delete on the caller\'s own messages', () => {
+  it('only offers Delete on the caller\'s own messages', async () => {
     mockSubscription(messages)
-    renderWithRouter()
+    await renderWithRouter()
 
     expect(screen.getAllByRole('button', { name: /delete/i })).toHaveLength(1) // only m1, authored by uid-1
   })
@@ -183,7 +200,8 @@ describe('RoomChat', () => {
   it('deletes a message on click', async () => {
     mockSubscription(messages)
     deleteMessage.mockResolvedValue(undefined)
-    renderWithRouter()
+    await renderWithRouter()
+    await waitFor(() => expect(getNotifications).toHaveBeenCalled())
 
     fireEvent.click(screen.getByRole('button', { name: /delete/i }))
     await waitFor(() => expect(deleteMessage).toHaveBeenCalledWith('room-1', 'm1'))
@@ -191,15 +209,15 @@ describe('RoomChat', () => {
 
   it('navigates back when Back is clicked', async () => {
     mockSubscription(messages)
-    renderWithRouter()
+    await renderWithRouter()
 
     fireEvent.click(screen.getByRole('button', { name: /back/i }))
     expect(await screen.findByText('Previous page')).toBeInTheDocument()
   })
 
-  it('only offers Report on other people\'s messages, not the caller\'s own', () => {
+  it('only offers Report on other people\'s messages, not the caller\'s own', async () => {
     mockSubscription(messages)
-    renderWithRouter()
+    await renderWithRouter()
 
     expect(screen.getAllByRole('button', { name: /^report$/i })).toHaveLength(1) // only m2, authored by uid-2
   })
@@ -221,7 +239,7 @@ describe('RoomChat', () => {
         resolvedAt: '2026-01-01T20:05:00.000Z'
       }
     })
-    renderWithRouter()
+    await renderWithRouter()
 
     fireEvent.click(screen.getByRole('button', { name: /^report$/i }))
     fireEvent.change(screen.getByLabelText(/why are you reporting/i), { target: { value: 'being rude' } })
@@ -251,7 +269,7 @@ describe('RoomChat', () => {
         resolvedAt: '2026-01-01T20:05:00.000Z'
       }
     })
-    renderWithRouter()
+    await renderWithRouter()
 
     fireEvent.click(screen.getByRole('button', { name: /^report$/i }))
     fireEvent.change(screen.getByLabelText(/why are you reporting/i), { target: { value: 'not sure' } })
@@ -260,9 +278,9 @@ describe('RoomChat', () => {
     expect(await screen.findByText(/flagged for human review/i)).toBeInTheDocument()
   })
 
-  it('closes the report form on Cancel without submitting', () => {
+  it('closes the report form on Cancel without submitting', async () => {
     mockSubscription(messages)
-    renderWithRouter()
+    await renderWithRouter()
 
     fireEvent.click(screen.getByRole('button', { name: /^report$/i }))
     fireEvent.click(screen.getByRole('button', { name: /cancel/i }))

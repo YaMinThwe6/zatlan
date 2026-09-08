@@ -29,8 +29,14 @@ afterEach(() => {
   getNotifications.mockReset()
 })
 
-function renderWithRouter() {
-  return render(
+// Awaits the shared shell's own async chain settling (AppHeader awaits getMe
+// before its NotificationBell child even mounts, which then awaits
+// getNotifications) before returning — otherwise that chain can still be in
+// flight when the test ends, firing after afterEach resets the mocks and
+// throwing on a now-unconfigured one, intermittently breaking whichever test
+// happens to be running when it lands.
+async function renderWithRouter() {
+  const result = render(
     <MemoryRouter initialEntries={['/people']}>
       <Routes>
         <Route path="/people" element={<PeopleDiscovery />} />
@@ -38,13 +44,15 @@ function renderWithRouter() {
       </Routes>
     </MemoryRouter>
   )
+  await waitFor(() => expect(getNotifications).toHaveBeenCalled())
+  return result
 }
 
 describe('PeopleDiscovery', () => {
   it('requests a wider result set than the Home widget default', async () => {
     getMe.mockResolvedValue({ uid: 'me' })
     getTasteMatches.mockResolvedValue({ items: [] })
-    renderWithRouter()
+    await renderWithRouter()
 
     await waitFor(() => expect(getTasteMatches).toHaveBeenCalledWith(30))
   })
@@ -58,7 +66,7 @@ describe('PeopleDiscovery', () => {
       ]
     })
     followUser.mockResolvedValue({ status: 'following' })
-    renderWithRouter()
+    await renderWithRouter()
 
     await waitFor(() => expect(screen.getAllByText('Rohan').length).toBeGreaterThan(0))
     expect(screen.getByRole('button', { name: 'Following' })).toBeInTheDocument()
@@ -70,7 +78,7 @@ describe('PeopleDiscovery', () => {
   it('opens a profile when a suggested person is clicked', async () => {
     getMe.mockResolvedValue({ uid: 'me' })
     getTasteMatches.mockResolvedValue({ items: [{ uid: 'u1', displayName: 'Rohan', photoURL: null, score: 84, relationship: 'none', matchReason: 'tasteMatch' }] })
-    renderWithRouter()
+    await renderWithRouter()
 
     await waitFor(() => expect(screen.getAllByText('Rohan').length).toBeGreaterThan(0))
     fireEvent.click(screen.getAllByText('Rohan')[0])
@@ -80,7 +88,7 @@ describe('PeopleDiscovery', () => {
   it('shows a friendly empty state instead of a blank page when there is truly no one to suggest', async () => {
     getMe.mockResolvedValue({ uid: 'me' })
     getTasteMatches.mockResolvedValue({ items: [] })
-    renderWithRouter()
+    await renderWithRouter()
 
     expect(await screen.findByText(/no suggestions yet/i)).toBeInTheDocument()
   })

@@ -14,6 +14,7 @@ import { Settings } from './features/settings/components/Settings'
 import { EventsPage } from './features/events/components/EventsPage'
 import { EventDetailPage } from './features/events/components/EventDetailPage'
 import { RoomChat } from './features/chat/components/RoomChat'
+import { Notifications } from './features/notifications/components/Notifications'
 import { About } from './features/about/components/About'
 import './App.css'
 
@@ -103,6 +104,7 @@ function App() {
       <Route path="/events" element={<EventsPage />} />
       <Route path="/events/:eventId" element={<EventDetailPage me={me} />} />
       <Route path="/rooms/:roomId" element={<RoomChat />} />
+      <Route path="/notifications" element={<Notifications />} />
       <Route path="/story" element={<About />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

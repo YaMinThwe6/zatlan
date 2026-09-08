@@ -58,8 +58,14 @@ const upcomingEvent = {
   createdAt: null
 }
 
-function renderWithRouter() {
-  return render(
+// Awaits the shared shell's own async chain settling (AppHeader awaits getMe
+// before its NotificationBell child even mounts, which then awaits
+// getNotifications) before returning — otherwise that chain can still be in
+// flight when the test ends, firing after afterEach resets the mocks and
+// throwing on a now-unconfigured one, intermittently breaking whichever test
+// happens to be running when it lands.
+async function renderWithRouter() {
+  const result = render(
     <MemoryRouter initialEntries={['/events']}>
       <Routes>
         <Route path="/events" element={<EventsPage />} />
@@ -67,12 +73,14 @@ function renderWithRouter() {
       </Routes>
     </MemoryRouter>
   )
+  await waitFor(() => expect(getNotifications).toHaveBeenCalled())
+  return result
 }
 
 describe('EventsPage', () => {
   it('loads and renders the Upcoming tab by default', async () => {
     getUpcomingEvents.mockResolvedValue({ items: [upcomingEvent] })
-    renderWithRouter()
+    await renderWithRouter()
 
     expect(await screen.findByText('Interstellar')).toBeInTheDocument()
     expect(getUpcomingEvents).toHaveBeenCalled()
@@ -82,7 +90,7 @@ describe('EventsPage', () => {
   it('switches to the Hosting tab and fetches hosted events instead', async () => {
     getUpcomingEvents.mockResolvedValue({ items: [] })
     getHostedEvents.mockResolvedValue({ items: [{ ...upcomingEvent, eventId: 'evt-2', title: 'My Party' }] })
-    renderWithRouter()
+    await renderWithRouter()
 
     await waitFor(() => expect(getUpcomingEvents).toHaveBeenCalled())
     fireEvent.click(screen.getByRole('button', { name: 'Hosting' }))
@@ -93,7 +101,7 @@ describe('EventsPage', () => {
 
   it('shows an empty state instead of nothing when there are no upcoming events', async () => {
     getUpcomingEvents.mockResolvedValue({ items: [] })
-    renderWithRouter()
+    await renderWithRouter()
 
     expect(await screen.findByText(/No public events coming up yet/i)).toBeInTheDocument()
   })
@@ -101,7 +109,7 @@ describe('EventsPage', () => {
   it('shows a "Host a watch party" CTA on the Hosting tab\'s empty state, opening the create-event modal — the old message had no way to act on it', async () => {
     getUpcomingEvents.mockResolvedValue({ items: [] })
     getHostedEvents.mockResolvedValue({ items: [] })
-    renderWithRouter()
+    await renderWithRouter()
 
     await waitFor(() => expect(getUpcomingEvents).toHaveBeenCalled())
     fireEvent.click(screen.getByRole('button', { name: 'Hosting' }))
@@ -119,7 +127,7 @@ describe('EventsPage', () => {
 
   it('shows Requested immediately on load for an approval-required event the backend already reports as pending — real bug: this used to reset to "Join" on every page refresh', async () => {
     getUpcomingEvents.mockResolvedValue({ items: [{ ...upcomingEvent, requiresApproval: true, joined: false, pending: true }] })
-    renderWithRouter()
+    await renderWithRouter()
 
     expect(await screen.findByRole('button', { name: 'Requested' })).toBeDisabled()
     expect(joinEvent).not.toHaveBeenCalled()
@@ -128,7 +136,7 @@ describe('EventsPage', () => {
   it('clicking Join calls joinEvent and reflects the Joined state', async () => {
     getUpcomingEvents.mockResolvedValue({ items: [upcomingEvent] })
     joinEvent.mockResolvedValue({ status: 'joined' })
-    renderWithRouter()
+    await renderWithRouter()
 
     const joinButton = await screen.findByRole('button', { name: 'Join' })
     fireEvent.click(joinButton)
@@ -139,7 +147,7 @@ describe('EventsPage', () => {
 
   it('clicking an event row navigates to its detail page, without triggering Join', async () => {
     getUpcomingEvents.mockResolvedValue({ items: [upcomingEvent] })
-    renderWithRouter()
+    await renderWithRouter()
 
     fireEvent.click(await screen.findByText('Interstellar'))
 
@@ -151,7 +159,7 @@ describe('EventsPage', () => {
     getUpcomingEvents.mockResolvedValue({ items: [upcomingEvent] })
     let rejectHosting!: (err: Error) => void
     getHostedEvents.mockReturnValue(new Promise((_resolve, reject) => { rejectHosting = reject }))
-    renderWithRouter()
+    await renderWithRouter()
 
     expect(await screen.findByText('Interstellar')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Hosting' }))
@@ -167,7 +175,7 @@ describe('EventsPage', () => {
 
   it('opens the create-event modal from "Host a watch party"', async () => {
     getUpcomingEvents.mockResolvedValue({ items: [] })
-    renderWithRouter()
+    await renderWithRouter()
 
     await waitFor(() => expect(getUpcomingEvents).toHaveBeenCalled())
     fireEvent.click(screen.getByRole('button', { name: /host a watch party/i }))
@@ -177,7 +185,7 @@ describe('EventsPage', () => {
 
   it('shows the host\'s display name on an Upcoming card', async () => {
     getUpcomingEvents.mockResolvedValue({ items: [upcomingEvent] })
-    renderWithRouter()
+    await renderWithRouter()
 
     expect(await screen.findByText(/hosted by asha/i)).toBeInTheDocument()
   })
@@ -185,7 +193,7 @@ describe('EventsPage', () => {
   it('omits the host line on the Hosting tab — redundant, it\'s always the caller\'s own event', async () => {
     getUpcomingEvents.mockResolvedValue({ items: [] })
     getHostedEvents.mockResolvedValue({ items: [upcomingEvent] })
-    renderWithRouter()
+    await renderWithRouter()
 
     await waitFor(() => expect(getUpcomingEvents).toHaveBeenCalled())
     fireEvent.click(screen.getByRole('button', { name: 'Hosting' }))
@@ -206,7 +214,7 @@ describe('EventsPage', () => {
 
     it('shows every mode by default', async () => {
       getUpcomingEvents.mockResolvedValue({ items: [onlineEvent, inPersonEvent] })
-      renderWithRouter()
+      await renderWithRouter()
 
       expect(await screen.findByText('Online Movie')).toBeInTheDocument()
       expect(screen.getByText('In Person Movie')).toBeInTheDocument()
@@ -214,7 +222,7 @@ describe('EventsPage', () => {
 
     it('filters down to only Online when that chip is clicked', async () => {
       getUpcomingEvents.mockResolvedValue({ items: [onlineEvent, inPersonEvent] })
-      renderWithRouter()
+      await renderWithRouter()
 
       await screen.findByText('Online Movie')
       fireEvent.click(screen.getByRole('button', { name: 'Online' }))
@@ -225,7 +233,7 @@ describe('EventsPage', () => {
 
     it('filters down to only In-person when that chip is clicked', async () => {
       getUpcomingEvents.mockResolvedValue({ items: [onlineEvent, inPersonEvent] })
-      renderWithRouter()
+      await renderWithRouter()
 
       await screen.findByText('Online Movie')
       fireEvent.click(screen.getByRole('button', { name: 'In-person' }))
@@ -247,7 +255,7 @@ describe('EventsPage', () => {
 
     it('defaults to soonest first', async () => {
       getUpcomingEvents.mockResolvedValue({ items: [laterButPopularEvent, soonEvent] })
-      renderWithRouter()
+      await renderWithRouter()
 
       const titles = (await screen.findAllByText(/movie$/i)).map((el) => el.textContent)
       expect(titles).toEqual(['Soon Movie', 'Popular Movie'])
@@ -255,7 +263,7 @@ describe('EventsPage', () => {
 
     it('reorders to most popular first when that sort is chosen', async () => {
       getUpcomingEvents.mockResolvedValue({ items: [soonEvent, laterButPopularEvent] })
-      renderWithRouter()
+      await renderWithRouter()
 
       await screen.findByText('Soon Movie')
       fireEvent.change(screen.getByLabelText(/sort/i), { target: { value: 'popular' } })
@@ -280,7 +288,7 @@ describe('EventsPage', () => {
           { ...upcomingEvent, eventId: 'evt-later', movieTitle: 'Later Movie', datetime: '2026-02-01T12:00:00.000Z' }
         ]
       })
-      renderWithRouter()
+      await renderWithRouter()
 
       expect(await screen.findByText('This Week Movie')).toBeInTheDocument()
       const headers = screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)

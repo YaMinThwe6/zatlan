@@ -201,6 +201,11 @@ describe('MovieSearch — guest usage (public Discover)', () => {
     // Guest-only chrome is gone; nav (incl. Our Story) now lives in the app shell.
     expect(screen.queryByRole('button', { name: /^get started$/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: /^discover movies$/i })).not.toBeInTheDocument()
+    // Lets the signed-in shell's own async chain (AppHeader awaits getMe
+    // before its NotificationBell child even mounts, which then awaits
+    // getNotifications) settle before this test ends — otherwise it can fire
+    // after afterEach resets the mocks, throwing in whichever test runs next.
+    await waitFor(() => expect(getNotifications).toHaveBeenCalled())
   })
 
   it('shows the right-rail People teaser', () => {

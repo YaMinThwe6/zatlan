@@ -121,3 +121,7 @@ export function getNotifications(unreadOnly = false): Promise<{ items: Notificat
 export function markNotificationRead(id: string): Promise<void> {
   return apiFetch(`/users/me/notifications/${encodeURIComponent(id)}`, { method: 'PATCH', body: { read: true }, auth: true })
 }
+
+export function clearAllNotifications(): Promise<void> {
+  return apiFetch('/users/me/notifications/clear', { method: 'POST', auth: true })
+}

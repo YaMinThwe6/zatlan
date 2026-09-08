@@ -3,6 +3,8 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { MemoryRouter, Routes, Route } from 'react-router-dom'
 
 const getNotifications = vi.fn()
+const markNotificationRead = vi.fn()
+const clearAllNotifications = vi.fn()
 const getHomeGreeting = vi.fn()
 const getRecommendations = vi.fn()
 const getTasteMatches = vi.fn()
@@ -12,6 +14,8 @@ const getFriendsRecommendations = vi.fn()
 
 vi.mock('../../../../src/features/home/services/homeApi', () => ({
   getNotifications,
+  markNotificationRead,
+  clearAllNotifications,
   getHomeGreeting,
   getRecommendations,
   getTasteMatches,
@@ -48,6 +52,8 @@ const me = {
 
 afterEach(() => {
   getNotifications.mockReset()
+  markNotificationRead.mockReset()
+  clearAllNotifications.mockReset()
   getHomeGreeting.mockReset()
   getRecommendations.mockReset()
   getTasteMatches.mockReset()
@@ -74,6 +80,7 @@ function renderWithRouter(onSignOut: () => void) {
         <Route path="/search" element={<p>Search page</p>} />
         <Route path="/story" element={<p>About page</p>} />
         <Route path="/profile/:uid" element={<p>Profile page</p>} />
+        <Route path="/notifications" element={<p>Notifications page</p>} />
       </Routes>
     </MemoryRouter>
   )
@@ -86,7 +93,20 @@ describe('Home', () => {
     renderWithRouter(vi.fn())
 
     await waitFor(() => expect(getNotifications).toHaveBeenCalledWith(true))
-    expect(await screen.findByText('2')).toBeInTheDocument()
+    expect((await screen.findAllByText('2')).length).toBeGreaterThan(0)
+  })
+
+  it('opens the notification dropdown when the bell is clicked, View all going to the full page', async () => {
+    mockAllEmpty()
+    renderWithRouter(vi.fn())
+
+    // Two bells exist — Home's own mobile-only one and AppHeader's
+    // desktop-only one (both present in the DOM at once; only real CSS media
+    // queries decide which actually shows, and jsdom doesn't apply those).
+    const bells = await screen.findAllByLabelText('0 unread notifications')
+    fireEvent.click(bells[0])
+    fireEvent.click((await screen.findAllByRole('button', { name: /view all/i }))[0])
+    expect(await screen.findByText('Notifications page')).toBeInTheDocument()
   })
 
   it('navigates to Search when the Search button is clicked', async () => {
@@ -102,7 +122,7 @@ describe('Home', () => {
     const onSignOut = vi.fn()
     renderWithRouter(onSignOut)
 
-    fireEvent.click(screen.getByRole('button', { name: /sign out/i }))
+    fireEvent.click(screen.getAllByRole('button', { name: /sign out/i })[0])
     expect(onSignOut).toHaveBeenCalled()
   })
 
@@ -115,7 +135,7 @@ describe('Home', () => {
     mockAllEmpty()
     renderWithRouter(vi.fn())
 
-    fireEvent.click(screen.getByRole('button', { name: /arjun/i }))
+    fireEvent.click(screen.getAllByRole('button', { name: /arjun/i })[0])
     expect(await screen.findByText('Profile page')).toBeInTheDocument()
   })
 
