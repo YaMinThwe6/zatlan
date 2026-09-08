@@ -1136,3 +1136,105 @@ describe("DELETE /events/:eventId", () => {
     expect(join.status).toBe(404);
   });
 });
+
+describe("POST /events/remind", () => {
+  function remind(app: ReturnType<typeof createApp>, secret?: string) {
+    const req = request(app).post("/events/remind");
+    return secret === undefined ? req : req.set("X-Cron-Secret", secret);
+  }
+
+  it("403s without the cron secret", async () => {
+    const app = createApp();
+    const res = await remind(app);
+    expect(res.status).toBe(403);
+  });
+
+  it("403s with the wrong cron secret", async () => {
+    const app = createApp();
+    const res = await remind(app, "not-the-secret");
+    expect(res.status).toBe(403);
+  });
+
+  it("notifies the host and participants separately, ~24h before an event that hasn't been reminded yet", async () => {
+    store.set("users/host-1", { displayName: "Meera" });
+    store.set("events/evt-1", {
+      hostId: "host-1",
+      movieId: "movie-1",
+      datetime: new Date(Date.now() + 20 * 60 * 60 * 1000) // 20h out — inside the 24h window
+    });
+    store.set("events/evt-1/participants/host-1", { joinedAt: new Date() });
+    store.set("events/evt-1/participants/guest-1", { joinedAt: new Date() });
+    store.set("events/evt-1/participants/guest-2", { joinedAt: new Date() });
+
+    const app = createApp();
+    const res = await remind(app, "test-cron-secret");
+    expect(res.status).toBe(204);
+
+    const hostNotifications = [...store.entries()].filter(([key]) => key.startsWith("users/host-1/notifications/"));
+    expect(hostNotifications).toHaveLength(1);
+    expect(hostNotifications[0][1]).toMatchObject({ type: "eventReminderHost24h", targetType: "event", targetId: "evt-1" });
+
+    const guest1Notifications = [...store.entries()].filter(([key]) => key.startsWith("users/guest-1/notifications/"));
+    expect(guest1Notifications).toHaveLength(1);
+    expect(guest1Notifications[0][1]).toMatchObject({ type: "eventReminderParticipant24h", targetType: "event", targetId: "evt-1" });
+
+    const guest2Notifications = [...store.entries()].filter(([key]) => key.startsWith("users/guest-2/notifications/"));
+    expect(guest2Notifications).toHaveLength(1);
+
+    expect((store.get("events/evt-1") as { reminder24hSentAt: unknown }).reminder24hSentAt).toBeTruthy();
+  });
+
+  it("also sends the ~1h reminder, separately from the 24h one, when an event is inside both windows", async () => {
+    store.set("users/host-1", { displayName: "Meera" });
+    store.set("events/evt-1", {
+      hostId: "host-1",
+      movieId: "movie-1",
+      datetime: new Date(Date.now() + 30 * 60 * 1000) // 30 minutes out — inside both windows
+    });
+    store.set("events/evt-1/participants/host-1", { joinedAt: new Date() });
+    store.set("events/evt-1/participants/guest-1", { joinedAt: new Date() });
+
+    const app = createApp();
+    const res = await remind(app, "test-cron-secret");
+    expect(res.status).toBe(204);
+
+    const hostNotifications = [...store.entries()].filter(([key]) => key.startsWith("users/host-1/notifications/"));
+    const types = hostNotifications.map(([, data]) => (data as { type: string }).type);
+    expect(types).toContain("eventReminderHost24h");
+    expect(types).toContain("eventReminderHost1h");
+
+    const evt = store.get("events/evt-1") as { reminder24hSentAt: unknown; reminder1hSentAt: unknown };
+    expect(evt.reminder24hSentAt).toBeTruthy();
+    expect(evt.reminder1hSentAt).toBeTruthy();
+  });
+
+  it("doesn't re-notify an event whose 24h reminder was already sent", async () => {
+    store.set("users/host-1", { displayName: "Meera" });
+    store.set("events/evt-1", {
+      hostId: "host-1",
+      movieId: "movie-1",
+      datetime: new Date(Date.now() + 20 * 60 * 60 * 1000),
+      reminder24hSentAt: new Date()
+    });
+    store.set("events/evt-1/participants/host-1", { joinedAt: new Date() });
+
+    const app = createApp();
+    await remind(app, "test-cron-secret");
+
+    const hostNotifications = [...store.entries()].filter(([key]) => key.startsWith("users/host-1/notifications/"));
+    expect(hostNotifications).toHaveLength(0);
+  });
+
+  it("ignores an event more than 24h out, a past event, and a soft-deleted event", async () => {
+    store.set("users/host-1", { displayName: "Meera" });
+    store.set("events/too-far", { hostId: "host-1", movieId: "movie-1", datetime: new Date(Date.now() + 48 * 60 * 60 * 1000) });
+    store.set("events/already-happened", { hostId: "host-1", movieId: "movie-1", datetime: new Date(Date.now() - 60 * 60 * 1000) });
+    store.set("events/cancelled", { hostId: "host-1", movieId: "movie-1", datetime: new Date(Date.now() + 60 * 60 * 1000), deleted: true });
+
+    const app = createApp();
+    await remind(app, "test-cron-secret");
+
+    const hostNotifications = [...store.entries()].filter(([key]) => key.startsWith("users/host-1/notifications/"));
+    expect(hostNotifications).toHaveLength(0);
+  });
+});

@@ -8,7 +8,12 @@ const envSchema = z.object({
   GOOGLE_APPLICATION_CREDENTIALS: z.string().min(1).optional(),
   SMTP_USER: z.string().min(1).optional(),
   SMTP_PASS: z.string().min(1).optional(),
-  GEMINI_API_KEY: z.string().min(1).optional()
+  GEMINI_API_KEY: z.string().min(1).optional(),
+  // Shared secret for the scheduled-job-only POST /events/remind endpoint
+  // (events.service.ts's sendEventReminders) — there's no signed-in user
+  // behind a cron call, so requireAuth doesn't apply; a scheduler (e.g.
+  // Cloud Scheduler) sends this in an X-Cron-Secret header instead.
+  CRON_SECRET: z.string().min(1).optional()
 });
 
 export const env = envSchema.parse(process.env);

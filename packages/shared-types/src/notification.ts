@@ -4,9 +4,20 @@
 export type NotificationType =
   | 'followRequest'
   | 'followApproved'
+  // Sent when someone follows a user whose followRequiresApproval is false —
+  // there's no request/approve step to notify on in that path, just the fact
+  // of a new follower (follow.service.ts's followUser).
+  | 'newFollower'
   | 'eventJoinRequest'
   | 'eventJoinApproved'
   | 'eventJoinDenied'
+  // Event reminders (sendEventReminders, run periodically by an external
+  // scheduler hitting POST /events/remind) — separate copy for the host vs.
+  // an ordinary participant, sent once at ~24h out and once at ~1h out.
+  | 'eventReminderHost24h'
+  | 'eventReminderHost1h'
+  | 'eventReminderParticipant24h'
+  | 'eventReminderParticipant1h'
   // Sent to a room's other members when a message lands and the room hasn't
   // already notified them in the last 30 minutes (rooms.service.ts's
   // sendMessage) — "this chat is active" rather than "you have a new

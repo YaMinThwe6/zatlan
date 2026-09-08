@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { requireAuth, optionalAuth } from "../middleware/auth.js";
+import { requireAuth, optionalAuth, requireCronSecret } from "../middleware/auth.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import {
   postEvent,
@@ -14,7 +14,8 @@ import {
   postApproveJoinRequest,
   postDenyJoinRequest,
   getEvent,
-  deleteEvent
+  deleteEvent,
+  postEventReminders
 } from "../controllers/events.controller.js";
 
 export const eventsRouter = Router();
@@ -35,6 +36,9 @@ eventsRouter.get("/events/hosting", requireAuth, asyncHandler(getHostedEvents));
 // reuses /events/hosting above).
 eventsRouter.get("/events/joined", requireAuth, asyncHandler(getJoinedEvents));
 eventsRouter.get("/events/requested", requireAuth, asyncHandler(getRequestedEvents));
+// Called by an external scheduler, not the app — requireCronSecret, not
+// requireAuth. Also kept above ":eventId" for the same shadowing reason.
+eventsRouter.post("/events/remind", requireCronSecret, asyncHandler(postEventReminders));
 eventsRouter.put("/events/:eventId/join", requireAuth, asyncHandler(putJoinEvent));
 eventsRouter.delete("/events/:eventId/join", requireAuth, asyncHandler(deleteJoinEvent));
 eventsRouter.get("/events/:eventId/joinRequests", requireAuth, asyncHandler(getJoinRequests));

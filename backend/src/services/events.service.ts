@@ -709,6 +709,67 @@ export async function listRequestedEvents(callerUid: string): Promise<{ items: U
   return { items };
 }
 
+const REMINDER_24H_WINDOW_MS = 24 * 60 * 60 * 1000;
+const REMINDER_1H_WINDOW_MS = 60 * 60 * 1000;
+
+async function notifyEventReminder(
+  db: FirebaseFirestore.Firestore,
+  eventId: string,
+  hostId: string,
+  window: "24h" | "1h"
+): Promise<void> {
+  const participantsSnap = await db.collection("events").doc(eventId).collection("participants").get();
+  const participantUids = participantsSnap.docs.map((d) => d.id).filter((participantUid) => participantUid !== hostId);
+  await writeNotification(hostId, window === "24h" ? "eventReminderHost24h" : "eventReminderHost1h", null, "event", eventId);
+  await Promise.all(
+    participantUids.map((participantUid) =>
+      writeNotification(participantUid, window === "24h" ? "eventReminderParticipant24h" : "eventReminderParticipant1h", null, "event", eventId)
+    )
+  );
+}
+
+// POST /events/remind — meant to be called periodically by an external
+// scheduler (e.g. Cloud Scheduler hitting this on a ~15-30min cadence, guarded
+// by requireCronSecret rather than a signed-in user), not by the app itself.
+// Window-based rather than exact-time: "due" means within N hours of the
+// event and not yet sent, so it fires correctly once regardless of how often
+// (or irregularly) the scheduler actually runs, rather than needing to land
+// in a precise instant. `now` is injectable for deterministic tests.
+export async function sendEventReminders(now: Date = new Date()): Promise<{ notified24h: number; notified1h: number }> {
+  const db = requireDb();
+  const snap = await db.collection("events").get();
+  const nowMs = now.getTime();
+  let notified24h = 0;
+  let notified1h = 0;
+
+  for (const d of snap.docs) {
+    const data = d.data();
+    if (data.deleted === true) continue;
+    const dt = data.datetime;
+    const millis = dt instanceof Date ? dt.getTime() : dt?.toDate?.().getTime();
+    if (typeof millis !== "number" || millis <= nowMs) continue; // already happened, or no valid datetime
+
+    const hostId = data.hostId as string;
+    const patch: Record<string, Date> = {};
+
+    if (millis - nowMs <= REMINDER_24H_WINDOW_MS && !data.reminder24hSentAt) {
+      await notifyEventReminder(db, d.id, hostId, "24h");
+      patch.reminder24hSentAt = now;
+      notified24h++;
+    }
+    if (millis - nowMs <= REMINDER_1H_WINDOW_MS && !data.reminder1hSentAt) {
+      await notifyEventReminder(db, d.id, hostId, "1h");
+      patch.reminder1hSentAt = now;
+      notified1h++;
+    }
+    if (Object.keys(patch).length > 0) {
+      await db.collection("events").doc(d.id).update(patch);
+    }
+  }
+
+  return { notified24h, notified1h };
+}
+
 // DELETE /events/:eventId — hld.md §21's general edit/delete pattern: author
 // (the host) only. No moderator branch — §14's role system was never built
 // (superseded by full-autonomy AI moderation, see hld.md §14), same reason

@@ -1,6 +1,7 @@
 import type { NextFunction, Request, Response } from "express";
 import type { DecodedIdToken } from "firebase-admin/auth";
 import { auth } from "../lib/firebaseAdmin.js";
+import { env } from "../lib/env.js";
 import { logger } from "../lib/logger.js";
 import { Responder } from "../utils/responder.js";
 
@@ -63,6 +64,21 @@ export async function optionalAuth(req: Request, _res: Response, next: NextFunct
   } catch {
     // Invalid/expired token on an optional-auth route — proceed as a guest
     // rather than 401, since a token isn't required here in the first place.
+  }
+  next();
+}
+
+/**
+ * Guards internal, non-user-facing endpoints meant to be called only by a
+ * scheduled job (POST /events/remind — events.service.ts's sendEventReminders),
+ * not a signed-in person, so requireAuth's Firebase-token check doesn't apply.
+ * A shared secret in a header instead. CRON_SECRET being unconfigured means
+ * locked down, never "open".
+ */
+export function requireCronSecret(req: Request, res: Response, next: NextFunction) {
+  const provided = req.header("X-Cron-Secret");
+  if (!env.CRON_SECRET || !provided || provided !== env.CRON_SECRET) {
+    return Responder.error(res, "FORBIDDEN", "Invalid or missing cron secret", 403);
   }
   next();
 }
