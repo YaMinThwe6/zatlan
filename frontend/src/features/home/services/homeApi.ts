@@ -67,6 +67,16 @@ export function getHostedEvents(): Promise<{ items: UpcomingEvent[] }> {
   return apiFetch('/events/hosting', { auth: true })
 }
 
+// Profile page's Events tab — the other two of its four sections (Hosting
+// reuses getHostedEvents above).
+export function getJoinedEvents(when: 'future' | 'past'): Promise<{ items: UpcomingEvent[] }> {
+  return apiFetch(`/events/joined?when=${when}`, { auth: true })
+}
+
+export function getRequestedEvents(): Promise<{ items: UpcomingEvent[] }> {
+  return apiFetch('/events/requested', { auth: true })
+}
+
 export function getEvent(eventId: string): Promise<EventDetail> {
   return apiFetch(`/events/${encodeURIComponent(eventId)}`, { auth: true })
 }

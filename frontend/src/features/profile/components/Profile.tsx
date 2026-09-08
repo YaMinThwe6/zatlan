@@ -1,14 +1,37 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { getUserProfile, type PublicProfile } from '../services/profileApi'
-import { followUser, unfollowUser } from '../../home/services/homeApi'
+import { getUserProfile, getUserReviews, type PublicProfile, type ProfileReviewEntry } from '../services/profileApi'
+import {
+  followUser,
+  unfollowUser,
+  getHostedEvents,
+  getJoinedEvents,
+  getRequestedEvents,
+  type UpcomingEvent
+} from '../../home/services/homeApi'
+import { getMyWatched, getMyWatchlist, type MyWatchedEntry, type MyWatchlistEntry } from '../../movie/services/movieApi'
 import { posterUrl } from '../../../lib/images'
+import { formatEventDate } from '../../../lib/eventDate'
 import { useAuth } from '../../../lib/AuthContext'
 import { Sidebar } from '../../../components/Sidebar'
 import { AppHeader } from '../../../components/AppHeader'
 import { MobileTabBar } from '../../../components/MobileTabBar'
 
-const COMING_SOON_TABS = ['Watched', 'Watchlist', 'Reviews', 'Events']
+type Tab = 'overview' | 'watched' | 'watchlist' | 'reviews' | 'events'
+const TABS: { id: Tab; label: string }[] = [
+  { id: 'overview', label: 'Overview' },
+  { id: 'watched', label: 'Watched' },
+  { id: 'watchlist', label: 'Watchlist' },
+  { id: 'reviews', label: 'Reviews' },
+  { id: 'events', label: 'Events' }
+]
+
+interface EventsTabData {
+  hosting: UpcomingEvent[]
+  joinedFuture: UpcomingEvent[]
+  joinedPast: UpcomingEvent[]
+  requested: UpcomingEvent[]
+}
 
 function connectLabel(relationship: PublicProfile['relationship']): string {
   if (relationship === 'following') return 'Following'
@@ -87,6 +110,41 @@ function ActivityLine({ item }: { item: PublicProfile['recentActivity'][number] 
   )
 }
 
+// One of the Events tab's four sections (Hosting / Joined-upcoming /
+// Joined-past / Requested) — same compact-row shape for all four, just a
+// different source list and empty-state message.
+function EventSection({ title, items, emptyText, onOpen }: { title: string; items: UpcomingEvent[]; emptyText: string; onOpen: (eventId: string) => void }) {
+  return (
+    <div>
+      <h2 className="mb-3 text-[14px] font-bold text-text">
+        {title} <span className="text-text-muted">({items.length})</span>
+      </h2>
+      {items.length === 0 ? (
+        <p className="text-sm text-text-muted">{emptyText}</p>
+      ) : (
+        <ul className="flex flex-col gap-2.5">
+          {items.map((event) => {
+            const poster = posterUrl(event.moviePoster, 'w92')
+            return (
+              <li key={event.eventId}>
+                <button type="button" onClick={() => onOpen(event.eventId)} className="flex w-full items-center gap-3 rounded-xl border border-border-soft bg-surface p-2.5 text-left">
+                  <div className="h-11 w-11 flex-none overflow-hidden rounded-lg bg-surface-alt">
+                    {poster && <img src={poster} alt="" className="h-full w-full object-cover" />}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-[12.5px] font-bold text-text">{event.title ?? event.movieTitle ?? 'Watch party'}</div>
+                    <div className="mt-0.5 text-[10.5px] text-text-muted">{formatEventDate(event.datetime)}</div>
+                  </div>
+                </button>
+              </li>
+            )
+          })}
+        </ul>
+      )}
+    </div>
+  )
+}
+
 // hld.md §5c — the destination "people who watched this"/"taste match" cards
 // now link to, and the frontend's read of the same privacy-filtered public
 // profile the backend computes (api-contracts.md §11b). Follow/unfollow
@@ -124,13 +182,119 @@ export function Profile() {
   // so a fast double-click fired two overlapping follow/unfollow requests.
   const [connectPending, setConnectPending] = useState(false)
 
+  const [tab, setTab] = useState<Tab>('overview')
+  // Each tab's data is fetched lazily, once, the first time it's opened — not
+  // upfront on mount. null means "not fetched yet" (distinct from "fetched
+  // and empty"), so the loading state and the empty state never get confused.
+  const [watched, setWatched] = useState<MyWatchedEntry[] | null>(null)
+  const [watchedCursor, setWatchedCursor] = useState<string | null>(null)
+  const [watchedLoading, setWatchedLoading] = useState(false)
+  const [watchlist, setWatchlist] = useState<MyWatchlistEntry[] | null>(null)
+  const [watchlistCursor, setWatchlistCursor] = useState<string | null>(null)
+  const [watchlistLoading, setWatchlistLoading] = useState(false)
+  const [reviews, setReviews] = useState<ProfileReviewEntry[] | null>(null)
+  const [reviewsLoading, setReviewsLoading] = useState(false)
+  const [eventsData, setEventsData] = useState<EventsTabData | null>(null)
+  const [eventsLoading, setEventsLoading] = useState(false)
+  const [tabError, setTabError] = useState('')
+
   useEffect(() => {
     setProfile(null)
     setError('')
+    // A fresh profile — reset every tab's lazily-fetched data too, so
+    // navigating from one person's profile to another's doesn't show the
+    // previous person's Watched/Reviews/Events under the new one.
+    setTab('overview')
+    setWatched(null)
+    setWatchedCursor(null)
+    setWatchlist(null)
+    setWatchlistCursor(null)
+    setReviews(null)
+    setEventsData(null)
+    setTabError('')
     getUserProfile(uid)
       .then(setProfile)
       .catch((err) => setError(err instanceof Error ? err.message : 'Failed to load profile'))
   }, [uid])
+
+  const isSelf = profile?.relationship === 'self'
+
+  useEffect(() => {
+    if (!profile) return
+    if (tab === 'watched' && isSelf && watched === null && !watchedLoading) {
+      setWatchedLoading(true)
+      setTabError('')
+      getMyWatched()
+        .then((res) => {
+          setWatched(res.items)
+          setWatchedCursor(res.nextCursor)
+        })
+        .catch((err) => setTabError(err instanceof Error ? err.message : 'Failed to load watched movies'))
+        .finally(() => setWatchedLoading(false))
+    }
+    if (tab === 'watchlist' && isSelf && watchlist === null && !watchlistLoading) {
+      setWatchlistLoading(true)
+      setTabError('')
+      getMyWatchlist()
+        .then((res) => {
+          setWatchlist(res.items)
+          setWatchlistCursor(res.nextCursor)
+        })
+        .catch((err) => setTabError(err instanceof Error ? err.message : 'Failed to load watchlist'))
+        .finally(() => setWatchlistLoading(false))
+    }
+    if (tab === 'reviews' && reviews === null && !reviewsLoading) {
+      setReviewsLoading(true)
+      setTabError('')
+      getUserReviews(uid)
+        .then((res) => setReviews(res.items))
+        .catch((err) => setTabError(err instanceof Error ? err.message : 'Failed to load reviews'))
+        .finally(() => setReviewsLoading(false))
+    }
+    if (tab === 'events' && isSelf && eventsData === null && !eventsLoading) {
+      setEventsLoading(true)
+      setTabError('')
+      Promise.all([getHostedEvents(), getJoinedEvents('future'), getJoinedEvents('past'), getRequestedEvents()])
+        .then(([hosting, joinedFuture, joinedPast, requested]) =>
+          setEventsData({ hosting: hosting.items, joinedFuture: joinedFuture.items, joinedPast: joinedPast.items, requested: requested.items })
+        )
+        .catch((err) => setTabError(err instanceof Error ? err.message : 'Failed to load events'))
+        .finally(() => setEventsLoading(false))
+    }
+    // Deliberately keyed on `tab` (and the loaded/loading flags each branch
+    // above already checks) rather than every dependency ESLint would want —
+    // each branch is idempotent (a no-op once its own data is loaded), so
+    // re-running this effect for an unrelated reason never double-fetches.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab, profile, isSelf, uid])
+
+  async function loadMoreWatched() {
+    if (watchedLoading || !watchedCursor) return
+    setWatchedLoading(true)
+    try {
+      const res = await getMyWatched(watchedCursor)
+      setWatched((prev) => [...(prev ?? []), ...res.items])
+      setWatchedCursor(res.nextCursor)
+    } catch (err) {
+      setTabError(err instanceof Error ? err.message : 'Failed to load more')
+    } finally {
+      setWatchedLoading(false)
+    }
+  }
+
+  async function loadMoreWatchlist() {
+    if (watchlistLoading || !watchlistCursor) return
+    setWatchlistLoading(true)
+    try {
+      const res = await getMyWatchlist(watchlistCursor)
+      setWatchlist((prev) => [...(prev ?? []), ...res.items])
+      setWatchlistCursor(res.nextCursor)
+    } catch (err) {
+      setTabError(err instanceof Error ? err.message : 'Failed to load more')
+    } finally {
+      setWatchlistLoading(false)
+    }
+  }
 
   async function toggleConnect() {
     if (!profile || connectPending) return
@@ -190,7 +354,6 @@ export function Profile() {
     )
   }
 
-  const isSelf = profile.relationship === 'self'
   const connectButton = connectLabel(profile.relationship)
   const showTasteMatch = !isSelf && profile.tasteMatchScore !== null
   const joined = formatJoined(profile.joinedAt)
@@ -318,110 +481,280 @@ export function Profile() {
         </p>
       )}
 
-      {/* tabs — only Overview has content behind it; the rest mirror Sidebar's
-          own "Coming soon" disabled treatment for features not built yet. */}
       <div role="tablist" aria-label="Profile sections" className="mt-5 flex w-full gap-4 border-b border-border-soft px-6 lg:mt-6 lg:w-auto lg:gap-7 lg:px-0">
-        <button type="button" role="tab" aria-selected="true" className="cursor-default border-b-2 border-accent pb-2.5 text-[12.5px] font-bold text-accent lg:pb-3 lg:text-[13.5px]">
-          Overview
-        </button>
-        {COMING_SOON_TABS.map((label) => (
+        {TABS.map(({ id, label }) => (
           <button
-            key={label}
+            key={id}
             type="button"
             role="tab"
-            aria-selected="false"
-            disabled
-            title="Coming soon"
-            className="cursor-default pb-2.5 text-[12.5px] font-semibold text-text-muted lg:pb-3 lg:text-[13.5px]"
+            aria-selected={tab === id}
+            onClick={() => setTab(id)}
+            className={
+              tab === id
+                ? 'border-b-2 border-accent pb-2.5 text-[12.5px] font-bold text-accent lg:pb-3 lg:text-[13.5px]'
+                : 'pb-2.5 text-[12.5px] font-semibold text-text-muted lg:pb-3 lg:text-[13.5px]'
+            }
           >
             {label}
           </button>
         ))}
       </div>
 
-      <div className="lg:grid lg:grid-cols-2 lg:gap-8 lg:pt-6">
-        {profile.topGenres.length > 0 && (
-          <section className="px-6 pt-6 text-left lg:px-0 lg:pt-0">
-            <h2 className="mb-1 text-[13.5px] font-bold text-text">Favorite Genres</h2>
-            <p className="mb-3 text-[10.5px] text-text-faint">Based on {profile.watchedCount} watched movies</p>
-            <div className="flex flex-col gap-2.5">
-              {profile.topGenres.map((g) => (
-                <div key={g.genre} className="flex justify-between text-[12.5px]">
-                  <span className="text-text-secondary">{g.genre}</span>
-                  <span className="font-bold text-accent">{g.percent}%</span>
+      {tabError && (
+        <p role="alert" className="mt-4 px-6 text-center text-[13px] text-red-400 lg:px-0 lg:text-left">
+          {tabError}
+        </p>
+      )}
+
+      {tab === 'overview' && (
+        <>
+          <div className="lg:grid lg:grid-cols-2 lg:gap-8 lg:pt-6">
+            {profile.topGenres.length > 0 && (
+              <section className="px-6 pt-6 text-left lg:px-0 lg:pt-0">
+                <h2 className="mb-1 text-[13.5px] font-bold text-text">Favorite Genres</h2>
+                <p className="mb-3 text-[10.5px] text-text-faint">Based on {profile.watchedCount} watched movies</p>
+                <div className="flex flex-col gap-2.5">
+                  {profile.topGenres.map((g) => (
+                    <div key={g.genre} className="flex justify-between text-[12.5px]">
+                      <span className="text-text-secondary">{g.genre}</span>
+                      <span className="font-bold text-accent">{g.percent}%</span>
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
-          </section>
-        )}
+              </section>
+            )}
 
-        {showTasteMatch && (
-          <section className="mx-6 mt-6 rounded-2xl border border-border-soft bg-surface-alt p-5 text-left lg:mx-0">
-            <h2 className="mb-3.5 text-[14px] font-bold text-text">Taste Match with you</h2>
-            <div className="flex items-center gap-4">
-              <svg width="72" height="72" viewBox="0 0 72 72" className="flex-none">
-                <circle cx="36" cy="36" r={TASTE_RING_RADIUS} fill="none" strokeWidth="7" className="stroke-border-soft" />
-                <circle
-                  data-testid="taste-match-progress"
-                  cx="36"
-                  cy="36"
-                  r={TASTE_RING_RADIUS}
-                  fill="none"
-                  strokeWidth="7"
-                  strokeLinecap="round"
-                  strokeDasharray={TASTE_RING_CIRCUMFERENCE}
-                  strokeDashoffset={tasteMatchRingOffset(profile.tasteMatchScore!)}
-                  transform="rotate(-90 36 36)"
-                  className="stroke-accent"
-                />
-                <text x="36" y="41" textAnchor="middle" className="fill-text text-[15px] font-extrabold">
-                  {profile.tasteMatchScore}%
-                </text>
-              </svg>
-              <p className="text-[12px] font-bold text-accent">{tasteMatchLabel(profile.tasteMatchScore!)}</p>
-            </div>
-          </section>
-        )}
-      </div>
+            {showTasteMatch && (
+              <section className="mx-6 mt-6 rounded-2xl border border-border-soft bg-surface-alt p-5 text-left lg:mx-0">
+                <h2 className="mb-3.5 text-[14px] font-bold text-text">Taste Match with you</h2>
+                <div className="flex items-center gap-4">
+                  <svg width="72" height="72" viewBox="0 0 72 72" className="flex-none">
+                    <circle cx="36" cy="36" r={TASTE_RING_RADIUS} fill="none" strokeWidth="7" className="stroke-border-soft" />
+                    <circle
+                      data-testid="taste-match-progress"
+                      cx="36"
+                      cy="36"
+                      r={TASTE_RING_RADIUS}
+                      fill="none"
+                      strokeWidth="7"
+                      strokeLinecap="round"
+                      strokeDasharray={TASTE_RING_CIRCUMFERENCE}
+                      strokeDashoffset={tasteMatchRingOffset(profile.tasteMatchScore!)}
+                      transform="rotate(-90 36 36)"
+                      className="stroke-accent"
+                    />
+                    <text x="36" y="41" textAnchor="middle" className="fill-text text-[15px] font-extrabold">
+                      {profile.tasteMatchScore}%
+                    </text>
+                  </svg>
+                  <p className="text-[12px] font-bold text-accent">{tasteMatchLabel(profile.tasteMatchScore!)}</p>
+                </div>
+              </section>
+            )}
+          </div>
 
-      <section className="px-6 py-7 lg:px-0">
-        <h2 className="mb-3 text-[15px] font-bold text-text">Recently watched</h2>
-        {/* QA (docs/qa/settings-bugs.md #2): watchedListVisible reports whether
-            OTHERS can see this list — the backend already returns the owner's
-            own data regardless of it, so self needs the same "|| isSelf" here
-            or the owner would see the "private" message on their own list. */}
-        {!profile.watchedListVisible && !isSelf && <p className="text-sm text-text-muted">This user's watched list is private.</p>}
-        {(profile.watchedListVisible || isSelf) && profile.watched.length === 0 && <p className="text-sm text-text-muted">No public watched movies yet.</p>}
-        {(profile.watchedListVisible || isSelf) && profile.watched.length > 0 && (
-          <ul className="flex flex-col gap-3 lg:grid lg:grid-cols-6 lg:gap-4">
-            {profile.watched.map((entry) => {
-              const poster = posterUrl(entry.poster, 'w185')
-              return (
-                <li key={entry.movieId}>
-                  <button type="button" onClick={() => navigate(`/movie/${entry.movieId}`)} className="flex w-full items-center gap-3 text-left lg:block">
-                    <div className="h-12 w-9 flex-none overflow-hidden rounded-md bg-surface-alt lg:h-auto lg:w-full lg:aspect-[2/3] lg:rounded-xl">
+          <section className="px-6 py-7 lg:px-0">
+            <h2 className="mb-3 text-[15px] font-bold text-text">Recently watched</h2>
+            {/* QA (docs/qa/settings-bugs.md #2): watchedListVisible reports whether
+                OTHERS can see this list — the backend already returns the owner's
+                own data regardless of it, so self needs the same "|| isSelf" here
+                or the owner would see the "private" message on their own list. */}
+            {!profile.watchedListVisible && !isSelf && <p className="text-sm text-text-muted">This user's watched list is private.</p>}
+            {(profile.watchedListVisible || isSelf) && profile.watched.length === 0 && <p className="text-sm text-text-muted">No public watched movies yet.</p>}
+            {(profile.watchedListVisible || isSelf) && profile.watched.length > 0 && (
+              <ul className="flex flex-col gap-3 lg:grid lg:grid-cols-6 lg:gap-4">
+                {profile.watched.map((entry) => {
+                  const poster = posterUrl(entry.poster, 'w185')
+                  return (
+                    <li key={entry.movieId}>
+                      <button type="button" onClick={() => navigate(`/movie/${entry.movieId}`)} className="flex w-full items-center gap-3 text-left lg:block">
+                        <div className="h-12 w-9 flex-none overflow-hidden rounded-md bg-surface-alt lg:h-auto lg:w-full lg:aspect-[2/3] lg:rounded-xl">
+                          {poster && <img src={poster} alt="" className="h-full w-full object-cover" />}
+                        </div>
+                        <div className="min-w-0 flex-1 lg:mt-2">
+                          <span className="block truncate text-[13px] font-medium text-text lg:text-[12px]">{entry.title ?? 'Untitled'}</span>
+                          <span className="text-[11px] text-text-muted">{formatWatchedAt(entry.watchedAt)}</span>
+                        </div>
+                      </button>
+                    </li>
+                  )
+                })}
+              </ul>
+            )}
+          </section>
+
+          {(profile.watchedListVisible || isSelf) && profile.recentActivity.length > 0 && (
+            <section className="px-6 pb-9 lg:px-0">
+              <h2 className="mb-3 text-[14px] font-bold text-text">Recent Activity</h2>
+              <ul className="flex flex-col gap-3.5">
+                {profile.recentActivity.map((item) => (
+                  <ActivityLine key={item.activityId} item={item} />
+                ))}
+              </ul>
+            </section>
+          )}
+        </>
+      )}
+
+      {tab === 'watched' && (
+        <section className="px-6 py-7 lg:px-0">
+          {isSelf ? (
+            <>
+              {watchedLoading && watched === null && <p className="text-sm text-text-muted">Loading…</p>}
+              {watched !== null && watched.length === 0 && <p className="text-sm text-text-muted">No watched movies yet.</p>}
+              {watched !== null && watched.length > 0 && (
+                <ul className="flex flex-col gap-3 lg:grid lg:grid-cols-6 lg:gap-4">
+                  {watched.map((entry) => {
+                    const poster = posterUrl(entry.poster, 'w185')
+                    return (
+                      <li key={entry.movieId}>
+                        <button type="button" onClick={() => navigate(`/movie/${entry.movieId}`)} className="flex w-full items-center gap-3 text-left lg:block">
+                          <div className="h-12 w-9 flex-none overflow-hidden rounded-md bg-surface-alt lg:h-auto lg:w-full lg:aspect-[2/3] lg:rounded-xl">
+                            {poster && <img src={poster} alt="" className="h-full w-full object-cover" />}
+                          </div>
+                          <div className="min-w-0 flex-1 lg:mt-2">
+                            <span className="block truncate text-[13px] font-medium text-text lg:text-[12px]">{entry.title ?? 'Untitled'}</span>
+                            <span className="text-[11px] text-text-muted">{formatWatchedAt(entry.watchedAt)}</span>
+                          </div>
+                        </button>
+                      </li>
+                    )
+                  })}
+                </ul>
+              )}
+              {watchedCursor && (
+                <button type="button" onClick={loadMoreWatched} disabled={watchedLoading} className="mt-4 text-[12px] font-semibold text-accent disabled:opacity-60">
+                  {watchedLoading ? 'Loading…' : 'Load more'}
+                </button>
+              )}
+            </>
+          ) : (
+            // Same privacy-gated preview Overview's "Recently watched" already
+            // fetched — no :uid-parameterized "full watched list" endpoint
+            // exists for viewing someone else's, only the public preview.
+            <>
+              {!profile.watchedListVisible && <p className="text-sm text-text-muted">This user's watched list is private.</p>}
+              {profile.watchedListVisible && profile.watched.length === 0 && <p className="text-sm text-text-muted">No public watched movies yet.</p>}
+              {profile.watchedListVisible && profile.watched.length > 0 && (
+                <ul className="flex flex-col gap-3 lg:grid lg:grid-cols-6 lg:gap-4">
+                  {profile.watched.map((entry) => {
+                    const poster = posterUrl(entry.poster, 'w185')
+                    return (
+                      <li key={entry.movieId}>
+                        <button type="button" onClick={() => navigate(`/movie/${entry.movieId}`)} className="flex w-full items-center gap-3 text-left lg:block">
+                          <div className="h-12 w-9 flex-none overflow-hidden rounded-md bg-surface-alt lg:h-auto lg:w-full lg:aspect-[2/3] lg:rounded-xl">
+                            {poster && <img src={poster} alt="" className="h-full w-full object-cover" />}
+                          </div>
+                          <div className="min-w-0 flex-1 lg:mt-2">
+                            <span className="block truncate text-[13px] font-medium text-text lg:text-[12px]">{entry.title ?? 'Untitled'}</span>
+                            <span className="text-[11px] text-text-muted">{formatWatchedAt(entry.watchedAt)}</span>
+                          </div>
+                        </button>
+                      </li>
+                    )
+                  })}
+                </ul>
+              )}
+            </>
+          )}
+        </section>
+      )}
+
+      {tab === 'watchlist' && (
+        <section className="px-6 py-7 lg:px-0">
+          {isSelf ? (
+            <>
+              {watchlistLoading && watchlist === null && <p className="text-sm text-text-muted">Loading…</p>}
+              {watchlist !== null && watchlist.length === 0 && <p className="text-sm text-text-muted">Your watchlist is empty.</p>}
+              {watchlist !== null && watchlist.length > 0 && (
+                <ul className="flex flex-col gap-3 lg:grid lg:grid-cols-6 lg:gap-4">
+                  {watchlist.map((entry) => {
+                    const poster = posterUrl(entry.poster, 'w185')
+                    return (
+                      <li key={entry.movieId}>
+                        <button type="button" onClick={() => navigate(`/movie/${entry.movieId}`)} className="flex w-full items-center gap-3 text-left lg:block">
+                          <div className="h-12 w-9 flex-none overflow-hidden rounded-md bg-surface-alt lg:h-auto lg:w-full lg:aspect-[2/3] lg:rounded-xl">
+                            {poster && <img src={poster} alt="" className="h-full w-full object-cover" />}
+                          </div>
+                          <div className="min-w-0 flex-1 lg:mt-2">
+                            <span className="block truncate text-[13px] font-medium text-text lg:text-[12px]">{entry.title ?? 'Untitled'}</span>
+                          </div>
+                        </button>
+                      </li>
+                    )
+                  })}
+                </ul>
+              )}
+              {watchlistCursor && (
+                <button type="button" onClick={loadMoreWatchlist} disabled={watchlistLoading} className="mt-4 text-[12px] font-semibold text-accent disabled:opacity-60">
+                  {watchlistLoading ? 'Loading…' : 'Load more'}
+                </button>
+              )}
+            </>
+          ) : (
+            // No backend support (or privacy policy) for viewing someone
+            // else's watchlist — unlike Watched, there's no toggle for this
+            // and no public preview to fall back to.
+            <p className="text-sm text-text-muted">Watchlists aren&rsquo;t shared with other users.</p>
+          )}
+        </section>
+      )}
+
+      {tab === 'reviews' && (
+        <section className="px-6 py-7 lg:px-0">
+          {reviewsLoading && reviews === null && <p className="text-sm text-text-muted">Loading…</p>}
+          {reviews !== null && reviews.length === 0 && <p className="text-sm text-text-muted">No reviews yet.</p>}
+          {reviews !== null && reviews.length > 0 && (
+            <ul className="flex flex-col gap-4">
+              {reviews.map((r) => {
+                const poster = posterUrl(r.moviePoster, 'w185')
+                return (
+                  <li key={r.movieId} className="flex gap-3 rounded-2xl border border-border-soft p-4">
+                    <button type="button" onClick={() => navigate(`/movie/${r.movieId}`)} className="h-16 w-11 flex-none overflow-hidden rounded-md bg-surface-alt">
                       {poster && <img src={poster} alt="" className="h-full w-full object-cover" />}
+                    </button>
+                    <div className="min-w-0 flex-1 text-left">
+                      <button type="button" onClick={() => navigate(`/movie/${r.movieId}`)} className="text-[13px] font-bold text-text">
+                        {r.movieTitle ?? 'Untitled'}
+                      </button>
+                      <div className="mt-0.5 text-[12px] text-accent" aria-label={`${r.rating} out of 5 stars`}>
+                        {'★'.repeat(r.rating)}
+                        {'☆'.repeat(5 - r.rating)}
+                      </div>
+                      {r.reviewText && <p className="mt-1.5 text-[12.5px] text-text-secondary">{r.reviewText}</p>}
+                      <p className="mt-1.5 text-[10.5px] text-text-muted">
+                        {formatWatchedAt(r.createdAt)}
+                        {r.isAnonymous ? ' · Posted anonymously' : ''}
+                      </p>
                     </div>
-                    <div className="min-w-0 flex-1 lg:mt-2">
-                      <span className="block truncate text-[13px] font-medium text-text lg:text-[12px]">{entry.title ?? 'Untitled'}</span>
-                      <span className="text-[11px] text-text-muted">{formatWatchedAt(entry.watchedAt)}</span>
-                    </div>
-                  </button>
-                </li>
-              )
-            })}
-          </ul>
-        )}
-      </section>
+                  </li>
+                )
+              })}
+            </ul>
+          )}
+        </section>
+      )}
 
-      {(profile.watchedListVisible || isSelf) && profile.recentActivity.length > 0 && (
-        <section className="px-6 pb-9 lg:px-0">
-          <h2 className="mb-3 text-[14px] font-bold text-text">Recent Activity</h2>
-          <ul className="flex flex-col gap-3.5">
-            {profile.recentActivity.map((item) => (
-              <ActivityLine key={item.activityId} item={item} />
-            ))}
-          </ul>
+      {tab === 'events' && (
+        <section className="px-6 py-7 lg:px-0">
+          {isSelf ? (
+            <>
+              {eventsLoading && eventsData === null && <p className="text-sm text-text-muted">Loading…</p>}
+              {eventsData && (
+                <div className="flex flex-col gap-7">
+                  <EventSection title="Hosting" items={eventsData.hosting} emptyText="You're not hosting any upcoming events." onOpen={(id) => navigate(`/events/${id}`)} />
+                  <EventSection title="Joined (upcoming)" items={eventsData.joinedFuture} emptyText="No upcoming events joined yet." onOpen={(id) => navigate(`/events/${id}`)} />
+                  <EventSection title="Joined (past)" items={eventsData.joinedPast} emptyText="No past events." onOpen={(id) => navigate(`/events/${id}`)} />
+                  <EventSection title="Requested" items={eventsData.requested} emptyText="No pending requests to join." onOpen={(id) => navigate(`/events/${id}`)} />
+                </div>
+              )}
+            </>
+          ) : (
+            // No backend support for viewing someone else's hosted/joined/
+            // requested events — every one of those endpoints is
+            // self-scoped, same as Watchlist above.
+            <p className="text-sm text-text-muted">Events aren&rsquo;t shared on other users&rsquo; profiles.</p>
+          )}
         </section>
       )}
     </div>

@@ -1,6 +1,6 @@
 import { apiFetch } from '../../../lib/api'
-export type { MovieSummary, MovieDetail, MovieStatus, MovieStatusLite, MovieStatusMap, DiscoverMoviesResponse, Review, MyReview, WatchedByEntry, SimilarMovieItem, TopFollowedPerson } from '@binj/shared-types'
-import type { MovieSummary, MovieDetail, MovieStatus, MovieStatusMap, DiscoverMoviesResponse, Review, MyReview, WatchedByEntry, SimilarMovieItem, TopFollowedPerson } from '@binj/shared-types'
+export type { MovieSummary, MovieDetail, MovieStatus, MovieStatusLite, MovieStatusMap, DiscoverMoviesResponse, Review, MyReview, WatchedByEntry, SimilarMovieItem, TopFollowedPerson, MyWatchedEntry, MyWatchlistEntry } from '@binj/shared-types'
+import type { MovieSummary, MovieDetail, MovieStatus, MovieStatusMap, DiscoverMoviesResponse, Review, MyReview, WatchedByEntry, SimilarMovieItem, TopFollowedPerson, MyWatchedEntry, MyWatchlistEntry } from '@binj/shared-types'
 
 export function searchMovies(query: string): Promise<{ items: MovieSummary[] }> {
   return apiFetch(`/search/movies?q=${encodeURIComponent(query)}`)
@@ -80,6 +80,17 @@ export function markWatched(movieId: string): Promise<void> {
 
 export function unmarkWatched(movieId: string): Promise<void> {
   return apiFetch(`/users/me/watched/${encodeURIComponent(movieId)}`, { method: 'DELETE', auth: true })
+}
+
+// Profile page's Watched/Watchlist tabs — self-only (movie title/poster
+// already joined in server-side), paginated the same cursor-round-tripped
+// way onboarding's suggestion grids already are.
+export function getMyWatched(cursor?: string | null): Promise<{ items: MyWatchedEntry[]; nextCursor: string | null }> {
+  return apiFetch(`/users/me/watched${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''}`, { auth: true })
+}
+
+export function getMyWatchlist(cursor?: string | null): Promise<{ items: MyWatchlistEntry[]; nextCursor: string | null }> {
+  return apiFetch(`/users/me/watchlist${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''}`, { auth: true })
 }
 
 export function getMovieWatchedBy(movieId: string): Promise<{ items: WatchedByEntry[]; nextCursor: string | null }> {

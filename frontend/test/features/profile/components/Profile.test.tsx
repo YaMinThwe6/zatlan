@@ -3,12 +3,26 @@ import { render, screen, fireEvent, waitFor, within } from '@testing-library/rea
 import { MemoryRouter, Routes, Route } from 'react-router-dom'
 
 const getUserProfile = vi.fn()
+const getUserReviews = vi.fn().mockResolvedValue({ items: [] })
 const followUser = vi.fn()
 const unfollowUser = vi.fn()
 const getNotifications = vi.fn().mockResolvedValue({ items: [] })
+const getHostedEvents = vi.fn().mockResolvedValue({ items: [] })
+const getJoinedEvents = vi.fn().mockResolvedValue({ items: [] })
+const getRequestedEvents = vi.fn().mockResolvedValue({ items: [] })
+const getMyWatched = vi.fn().mockResolvedValue({ items: [], nextCursor: null })
+const getMyWatchlist = vi.fn().mockResolvedValue({ items: [], nextCursor: null })
 
-vi.mock('../../../../src/features/profile/services/profileApi', () => ({ getUserProfile }))
-vi.mock('../../../../src/features/home/services/homeApi', () => ({ followUser, unfollowUser, getNotifications }))
+vi.mock('../../../../src/features/profile/services/profileApi', () => ({ getUserProfile, getUserReviews }))
+vi.mock('../../../../src/features/home/services/homeApi', () => ({
+  followUser,
+  unfollowUser,
+  getNotifications,
+  getHostedEvents,
+  getJoinedEvents,
+  getRequestedEvents
+}))
+vi.mock('../../../../src/features/movie/services/movieApi', () => ({ getMyWatched, getMyWatchlist }))
 
 // AppHeader's own dependency (rendered for real below, not mocked away, same
 // as MovieDetail.test.tsx treats Sidebar/AppHeader) — nothing specific to
@@ -57,6 +71,12 @@ afterEach(() => {
   unfollowUser.mockReset()
   getNotifications.mockClear()
   getMe.mockClear()
+  getUserReviews.mockClear().mockResolvedValue({ items: [] })
+  getHostedEvents.mockClear().mockResolvedValue({ items: [] })
+  getJoinedEvents.mockClear().mockResolvedValue({ items: [] })
+  getRequestedEvents.mockClear().mockResolvedValue({ items: [] })
+  getMyWatched.mockClear().mockResolvedValue({ items: [], nextCursor: null })
+  getMyWatchlist.mockClear().mockResolvedValue({ items: [], nextCursor: null })
   vi.restoreAllMocks() // undoes any window.confirm spy from the unfollow-confirmation tests
 })
 
@@ -70,6 +90,7 @@ function renderWithRouter(uid = 'u1') {
         <Route path="/profile/:uid" element={<Profile />} />
         <Route path="/movie/:movieId" element={<p>Movie detail page</p>} />
         <Route path="/settings" element={<p>Settings page</p>} />
+        <Route path="/events/:eventId" element={<p>Event detail page</p>} />
       </Routes>
     </MemoryRouter>
   )
@@ -289,13 +310,147 @@ describe('Profile', () => {
     expect(screen.queryByText(/taste match/i)).not.toBeInTheDocument()
   })
 
-  it('shows Overview as the active tab alongside the not-yet-built tabs', async () => {
+  it('shows Overview as the active tab by default, every tab clickable — real gap this closes: they used to be permanently disabled', async () => {
     getUserProfile.mockResolvedValue(baseProfile)
     renderWithRouter()
 
     await waitFor(() => expect(screen.getByText('Rohan')).toBeInTheDocument())
     expect(screen.getByRole('tab', { name: 'Overview', selected: true })).toBeInTheDocument()
-    expect(screen.getByRole('tab', { name: 'Watched' })).toHaveAttribute('title', 'Coming soon')
+    expect(screen.getByRole('tab', { name: 'Watched' })).toBeEnabled()
+    expect(screen.getByRole('tab', { name: 'Watchlist' })).toBeEnabled()
+    expect(screen.getByRole('tab', { name: 'Reviews' })).toBeEnabled()
+    expect(screen.getByRole('tab', { name: 'Events' })).toBeEnabled()
+  })
+
+  describe('Watched tab', () => {
+    it("fetches and shows the caller's own full watched list, not just Overview's capped preview", async () => {
+      getUserProfile.mockResolvedValue({ ...baseProfile, relationship: 'self' })
+      getMyWatched.mockResolvedValue({
+        items: [{ movieId: 'm9', title: 'Whiplash', poster: '/whiplash.jpg', watchedAt: '2026-03-01T00:00:00.000Z', visibility: 'public' }],
+        nextCursor: null
+      })
+      renderWithRouter()
+
+      await waitFor(() => expect(screen.getByText('Rohan')).toBeInTheDocument())
+      fireEvent.click(screen.getByRole('tab', { name: 'Watched' }))
+
+      expect(await screen.findByText('Whiplash')).toBeInTheDocument()
+      expect(getMyWatched).toHaveBeenCalled()
+    })
+
+    it("falls back to the public preview (Overview's already-fetched profile.watched) on someone else's profile — no full-list endpoint exists for that", async () => {
+      getUserProfile.mockResolvedValue(baseProfile) // relationship: 'none', watched: [Interstellar]
+      renderWithRouter()
+
+      await waitFor(() => expect(screen.getByText('Rohan')).toBeInTheDocument())
+      fireEvent.click(screen.getByRole('tab', { name: 'Watched' }))
+
+      expect(await screen.findByText('Interstellar')).toBeInTheDocument()
+      expect(getMyWatched).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('Watchlist tab', () => {
+    it("fetches and shows the caller's own watchlist", async () => {
+      getUserProfile.mockResolvedValue({ ...baseProfile, relationship: 'self' })
+      getMyWatchlist.mockResolvedValue({
+        items: [{ movieId: 'm9', title: 'Parasite', poster: null, addedAt: '2026-03-01T00:00:00.000Z' }],
+        nextCursor: null
+      })
+      renderWithRouter()
+
+      await waitFor(() => expect(screen.getByText('Rohan')).toBeInTheDocument())
+      fireEvent.click(screen.getByRole('tab', { name: 'Watchlist' }))
+
+      expect(await screen.findByText('Parasite')).toBeInTheDocument()
+    })
+
+    it("shows a not-shared message on someone else's profile, without fetching", async () => {
+      getUserProfile.mockResolvedValue(baseProfile)
+      renderWithRouter()
+
+      await waitFor(() => expect(screen.getByText('Rohan')).toBeInTheDocument())
+      fireEvent.click(screen.getByRole('tab', { name: 'Watchlist' }))
+
+      expect(await screen.findByText(/watchlists aren.t shared/i)).toBeInTheDocument()
+      expect(getMyWatchlist).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('Reviews tab', () => {
+    it('fetches and shows reviews, on both your own and someone else\'s profile', async () => {
+      getUserProfile.mockResolvedValue(baseProfile)
+      getUserReviews.mockResolvedValue({
+        items: [{ movieId: 'm9', movieTitle: 'Whiplash', moviePoster: null, rating: 4, reviewText: 'Great editing', isAnonymous: false, createdAt: '2026-03-01T00:00:00.000Z' }]
+      })
+      renderWithRouter()
+
+      await waitFor(() => expect(screen.getByText('Rohan')).toBeInTheDocument())
+      fireEvent.click(screen.getByRole('tab', { name: 'Reviews' }))
+
+      expect(await screen.findByText('Whiplash')).toBeInTheDocument()
+      expect(screen.getByText('Great editing')).toBeInTheDocument()
+      expect(getUserReviews).toHaveBeenCalledWith('u1')
+    })
+
+    it('shows an empty state when there are no reviews', async () => {
+      getUserProfile.mockResolvedValue(baseProfile)
+      renderWithRouter()
+
+      await waitFor(() => expect(screen.getByText('Rohan')).toBeInTheDocument())
+      fireEvent.click(screen.getByRole('tab', { name: 'Reviews' }))
+
+      expect(await screen.findByText(/no reviews yet/i)).toBeInTheDocument()
+    })
+  })
+
+  describe('Events tab', () => {
+    it("fetches and shows all four sections (Hosting, Joined upcoming, Joined past, Requested) on the caller's own profile", async () => {
+      getUserProfile.mockResolvedValue({ ...baseProfile, relationship: 'self' })
+      getHostedEvents.mockResolvedValue({ items: [{ eventId: 'e1', title: 'My Party', movieTitle: null, moviePoster: null, datetime: null, roomId: 'r1' }] })
+      getJoinedEvents.mockImplementation((when: string) =>
+        Promise.resolve({
+          items: [
+            { eventId: when === 'future' ? 'e2' : 'e3', title: when === 'future' ? 'Upcoming Watch' : 'Past Watch', movieTitle: null, moviePoster: null, datetime: null, roomId: 'r2' }
+          ]
+        })
+      )
+      getRequestedEvents.mockResolvedValue({ items: [{ eventId: 'e4', title: 'Pending Party', movieTitle: null, moviePoster: null, datetime: null, roomId: 'r4' }] })
+      renderWithRouter()
+
+      await waitFor(() => expect(screen.getByText('Rohan')).toBeInTheDocument())
+      fireEvent.click(screen.getByRole('tab', { name: 'Events' }))
+
+      expect(await screen.findByText('My Party')).toBeInTheDocument()
+      expect(screen.getByText('Upcoming Watch')).toBeInTheDocument()
+      expect(screen.getByText('Past Watch')).toBeInTheDocument()
+      expect(screen.getByText('Pending Party')).toBeInTheDocument()
+      expect(screen.getByRole('heading', { name: /hosting.*1/i })).toBeInTheDocument()
+      expect(screen.getByRole('heading', { name: /requested.*1/i })).toBeInTheDocument()
+    })
+
+    it("shows a not-available message on someone else's profile, without fetching", async () => {
+      getUserProfile.mockResolvedValue(baseProfile)
+      renderWithRouter()
+
+      await waitFor(() => expect(screen.getByText('Rohan')).toBeInTheDocument())
+      fireEvent.click(screen.getByRole('tab', { name: 'Events' }))
+
+      expect(await screen.findByText(/events aren.t shared/i)).toBeInTheDocument()
+      expect(getHostedEvents).not.toHaveBeenCalled()
+    })
+
+    it('navigates to the event detail page when an event row is clicked', async () => {
+      getUserProfile.mockResolvedValue({ ...baseProfile, relationship: 'self' })
+      getHostedEvents.mockResolvedValue({ items: [{ eventId: 'e1', title: 'My Party', movieTitle: null, moviePoster: null, datetime: null, roomId: 'r1' }] })
+      renderWithRouter()
+
+      await waitFor(() => expect(screen.getByText('Rohan')).toBeInTheDocument())
+      fireEvent.click(screen.getByRole('tab', { name: 'Events' }))
+      fireEvent.click(await screen.findByText('My Party'))
+
+      expect(await screen.findByText('Event detail page')).toBeInTheDocument()
+    })
   })
 
   it('gives the Following state its own accent-outline style, distinct from the muted Requested state', async () => {
