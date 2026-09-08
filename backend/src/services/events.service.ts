@@ -63,7 +63,7 @@ function isValidLocationInput(location: unknown): location is { area: string; ci
 // no way to know the caller had already joined something — the frontend's
 // local-only "joined" UI state reset to "Join" on every refresh even for an
 // event the caller (or the host, for their own event) had already joined.
-function toEventSummary(id: string, data: FirebaseFirestore.DocumentData, canSeePrecise: boolean, joined: boolean): EventSummary {
+function toEventSummary(id: string, data: FirebaseFirestore.DocumentData, canSeePrecise: boolean, joined: boolean, pending: boolean): EventSummary {
   const rawLocation = data.location as { area?: unknown; city?: unknown; lat?: unknown; lng?: unknown } | null | undefined;
   const hasLocation = typeof rawLocation === "object" && rawLocation !== null;
   return {
@@ -82,18 +82,30 @@ function toEventSummary(id: string, data: FirebaseFirestore.DocumentData, canSee
     requiresApproval: data.requiresApproval,
     roomId: data.roomId,
     createdAt: toIso(data.createdAt),
-    joined
+    joined,
+    pending
   };
 }
 
-// Shared by listUpcomingEvents/listNearbyEvents below — a plain participant
-// existence check per event, only when there's actually a caller to check
-// (a guest browsing /events/upcoming with no token has nothing to check
-// against, and always gets joined:false).
-async function checkJoined(db: FirebaseFirestore.Firestore, eventId: string, callerUid: string | undefined): Promise<boolean> {
-  if (!callerUid) return false;
-  const snap = await db.collection("events").doc(eventId).collection("participants").doc(callerUid).get();
-  return snap.exists;
+// Shared by listUpcomingEvents/listNearbyEvents below. Real bug this fixes:
+// this used to only check `participants` (joined y/n), never `joinRequests`
+// — so a caller with an outstanding approval request on an approval-required
+// event had no persisted signal at all once the frontend's own session state
+// was gone (e.g. on refresh), and the Join button silently reverted from
+// "Requested" back to "Join" even though the request was still sitting there.
+// `joinRequests` is only checked when not already a participant — same
+// "only pay for what you need" shape getEvent's viewerStatus already uses.
+async function checkJoinStatus(
+  db: FirebaseFirestore.Firestore,
+  eventId: string,
+  callerUid: string | undefined
+): Promise<{ joined: boolean; pending: boolean }> {
+  if (!callerUid) return { joined: false, pending: false };
+  const eventRef = db.collection("events").doc(eventId);
+  const participantSnap = await eventRef.collection("participants").doc(callerUid).get();
+  if (participantSnap.exists) return { joined: true, pending: false };
+  const requestSnap = await eventRef.collection("joinRequests").doc(callerUid).get();
+  return { joined: false, pending: requestSnap.exists };
 }
 
 // Shared by every UpcomingEvent-shaped list below (upcoming/nearby/hosting)
@@ -210,7 +222,7 @@ export async function createEvent(hostId: string, body: CreateEventInput, option
   }
   await batch.commit();
 
-  return toEventSummary(eventRef.id, eventDoc, true, true); // the host just created it — always a participant
+  return toEventSummary(eventRef.id, eventDoc, true, true, false); // the host just created it — always a participant, never pending
 }
 
 // GET /events/upcoming — public events browse/upcoming list (schema.md §6's
@@ -241,15 +253,15 @@ export async function listUpcomingEvents(rawLimit: unknown, rawMovieId?: unknown
       .filter((d) => d.data().deleted !== true)
       .map(async (d) => {
         const data = d.data();
-        const [movieSnap, joined, hostDisplayName] = await Promise.all([
+        const [movieSnap, joinStatus, hostDisplayName] = await Promise.all([
           db.collection("movies").doc(data.movieId).get(),
-          checkJoined(db, d.id, callerUid),
+          checkJoinStatus(db, d.id, callerUid),
           getHostDisplayName(db, data.hostId)
         ]);
         return {
           // Browse-list — never the exact spot, joined or not (hld.md §9's
           // pre-join privacy rule): area/city is enough to judge interest.
-          ...toEventSummary(d.id, data, false, joined),
+          ...toEventSummary(d.id, data, false, joinStatus.joined, joinStatus.pending),
           movieTitle: movieSnap.data()?.title ?? null,
           moviePoster: movieSnap.data()?.poster ?? null,
           hostDisplayName
@@ -465,16 +477,16 @@ export async function listNearbyEvents(callerUid: string, rawLat: unknown, rawLn
 
   const items: NearbyEvent[] = await Promise.all(
     candidates.map(async ({ id, data, distanceKm }) => {
-      const [movieSnap, joined, hostDisplayName] = await Promise.all([
+      const [movieSnap, joinStatus, hostDisplayName] = await Promise.all([
         db.collection("movies").doc(data.movieId).get(),
-        checkJoined(db, id, callerUid),
+        checkJoinStatus(db, id, callerUid),
         getHostDisplayName(db, data.hostId)
       ]);
       return {
         // The nearby map (NearbyEventsMap.tsx) needs a real pin for every
         // candidate it plots — left as-is, out of scope for the pre-join
         // area/city-only rule (a separate, larger design question).
-        ...toEventSummary(id, data, true, joined),
+        ...toEventSummary(id, data, true, joinStatus.joined, joinStatus.pending),
         movieTitle: movieSnap.data()?.title ?? null,
         moviePoster: movieSnap.data()?.poster ?? null,
         hostDisplayName,
@@ -529,7 +541,7 @@ export async function getEvent(eventId: string, callerUid: string): Promise<Even
         : "none";
 
   return {
-    ...toEventSummary(eventSnap.id, data, canSeePrecise, isParticipant),
+    ...toEventSummary(eventSnap.id, data, canSeePrecise, isParticipant, viewerStatus === "pending"),
     movieTitle: movieSnap.data()?.title ?? null,
     moviePoster: movieSnap.data()?.poster ?? null,
     hostDisplayName: hostSnap.data()?.displayName ?? "Unknown",
@@ -557,7 +569,7 @@ export async function listHostedEvents(uid: string): Promise<{ items: UpcomingEv
         const data = d.data();
         const movieSnap = await db.collection("movies").doc(data.movieId).get();
         return {
-          ...toEventSummary(d.id, data, true, true), // the host always sees their own event's exact location, and always joined it (host auto-joins on create)
+          ...toEventSummary(d.id, data, true, true, false), // the host always sees their own event's exact location, always joined it (host auto-joins on create), never pending
           hostDisplayName,
           movieTitle: movieSnap.data()?.title ?? null,
           moviePoster: movieSnap.data()?.poster ?? null

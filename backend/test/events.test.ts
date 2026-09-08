@@ -301,6 +301,32 @@ describe("GET /events/upcoming", () => {
     expect(res.body.data.items[0].joined).toBe(false);
   });
 
+  it("reports pending:false for a guest with no token", async () => {
+    store.set("events/soon", { hostId: "host-1", movieId: "movie-1", visibility: "public", datetime: new Date("2099-06-01"), participantCount: 1, participantLimit: 5, requiresApproval: true });
+    const app = createApp();
+    const res = await request(app).get("/events/upcoming");
+    expect(res.body.data.items[0].pending).toBe(false);
+  });
+
+  it("reports pending:true for an authenticated caller with an outstanding join request — real bug: the Join button reverted to 'Join' on refresh after requesting to join an approval-required event, on both Home and the Events page", async () => {
+    store.set("events/soon", { hostId: "host-1", movieId: "movie-1", visibility: "public", datetime: new Date("2099-06-01"), participantCount: 1, participantLimit: 5, requiresApproval: true });
+    store.set("events/soon/joinRequests/guest-1", { createdAt: new Date() });
+    currentUid = "guest-1";
+    const app = createApp();
+    const res = await authed(app, "get", "/events/upcoming");
+    expect(res.body.data.items[0].joined).toBe(false);
+    expect(res.body.data.items[0].pending).toBe(true);
+  });
+
+  it("reports pending:false once the caller has actually joined, not just requested — a stale joinRequest left behind shouldn't override actual participation", async () => {
+    store.set("events/soon", { hostId: "host-1", movieId: "movie-1", visibility: "public", datetime: new Date("2099-06-01"), participantCount: 2, participantLimit: 5, requiresApproval: true });
+    store.set("events/soon/participants/host-1", { joinedAt: new Date() });
+    const app = createApp(); // currentUid stays "host-1"
+    const res = await authed(app, "get", "/events/upcoming");
+    expect(res.body.data.items[0].joined).toBe(true);
+    expect(res.body.data.items[0].pending).toBe(false);
+  });
+
   it("shows area/city but never the exact coordinates, even for the caller who hosts the event", async () => {
     store.set("events/soon", {
       hostId: "host-1", // currentUid defaults to "host-1" — this caller hosts it
@@ -560,6 +586,21 @@ describe("GET /events/nearby", () => {
     const res = await authed(app, "get", `/events/nearby?lat=${bangalore.lat}&lng=${bangalore.lng}&radiusKm=5`);
     expect(res.status).toBe(200);
     expect(res.body.data.items).toEqual([]);
+  });
+
+  it("reports pending:true for a caller with an outstanding join request — same real bug as /events/upcoming: the nearby map's Join button also reverted to 'Join' on refresh", async () => {
+    const app = createApp();
+    const created = await authed(app, "post", "/events").send(
+      inPersonBody({ location: { area: "Near MG Road", city: "Bangalore", ...bangaloreNearby }, requiresApproval: true })
+    );
+    const eventId = created.body.data.eventId;
+
+    currentUid = "guest-1";
+    await authed(app, "put", `/events/${eventId}/join`);
+
+    const res = await authed(app, "get", `/events/nearby?lat=${bangalore.lat}&lng=${bangalore.lng}&radiusKm=5`);
+    expect(res.body.data.items[0].joined).toBe(false);
+    expect(res.body.data.items[0].pending).toBe(true);
   });
 
   it("excludes a private event the caller neither hosts nor was invited to", async () => {

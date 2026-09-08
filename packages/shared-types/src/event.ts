@@ -38,6 +38,13 @@ export interface EventSummary {
   // Join/Joined button state can be initialized correctly on first render
   // instead of always starting as "Join" until clicked.
   joined: boolean
+  // Whether the caller has an outstanding join request awaiting the host's
+  // approval on an approval-required event. A separate flag from `joined`
+  // (never both true) — without it, a pending request was indistinguishable
+  // from never having requested at all once the page refreshed, since only
+  // `joined` survived a reload; the button silently reverted from
+  // "Requested" back to "Join".
+  pending: boolean
 }
 
 // GET /events/upcoming item — EventSummary joined with the movie it's for,

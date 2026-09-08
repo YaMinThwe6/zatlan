@@ -178,9 +178,10 @@ export function EventsPage() {
                   <h2 className="text-[12px] font-bold tracking-wide text-text-muted uppercase">{GROUP_LABELS[group]}</h2>
                   {events.map((event) => {
                     // See Home's UpcomingEvents.tsx for why this falls back to
-                    // event.joined — joinStatus alone starts empty on every load,
-                    // including for the caller's own event mixed into "Upcoming".
-                    const status = joinStatus[event.eventId] ?? (event.joined ? 'joined' : undefined)
+                    // event.joined/event.pending — joinStatus alone starts
+                    // empty on every load, including for the caller's own
+                    // event mixed into "Upcoming".
+                    const status = joinStatus[event.eventId] ?? (event.joined ? 'joined' : event.pending ? 'pending' : undefined)
                     const poster = posterUrl(event.moviePoster)
                     return (
                       <div

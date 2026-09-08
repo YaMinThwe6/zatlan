@@ -51,12 +51,13 @@ export function UpcomingEvents() {
       <ul className="flex flex-col gap-3">
         {items.map((event) => {
           // joinStatus only ever records a change made THIS session (via
-          // handleJoin) — event.joined is the real, persisted answer from
-          // the backend, so it's the fallback rather than always starting
-          // "un-joined" until clicked. Without this, the button reverted to
-          // "Join" on every refresh even for an event already joined (or
-          // one's own hosted event, always auto-joined).
-          const status = joinStatus[event.eventId] ?? (event.joined ? 'joined' : undefined)
+          // handleJoin) — event.joined/event.pending are the real, persisted
+          // answer from the backend, so they're the fallback rather than
+          // always starting "un-joined" until clicked. Without this, the
+          // button reverted to "Join" on every refresh — even for an event
+          // already joined (or one's own hosted event, always auto-joined),
+          // or for an approval-required event with a request still pending.
+          const status = joinStatus[event.eventId] ?? (event.joined ? 'joined' : event.pending ? 'pending' : undefined)
           const poster = posterUrl(event.moviePoster)
           return (
             <li key={event.eventId} className="flex items-center gap-3 rounded-2xl border border-border-soft bg-surface p-3">

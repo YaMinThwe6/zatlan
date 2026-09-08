@@ -82,6 +82,14 @@ describe('EventsPage', () => {
     expect(await screen.findByText(/No public events coming up yet/i)).toBeInTheDocument()
   })
 
+  it('shows Requested immediately on load for an approval-required event the backend already reports as pending — real bug: this used to reset to "Join" on every page refresh', async () => {
+    getUpcomingEvents.mockResolvedValue({ items: [{ ...upcomingEvent, requiresApproval: true, joined: false, pending: true }] })
+    renderWithRouter()
+
+    expect(await screen.findByRole('button', { name: 'Requested' })).toBeDisabled()
+    expect(joinEvent).not.toHaveBeenCalled()
+  })
+
   it('clicking Join calls joinEvent and reflects the Joined state', async () => {
     getUpcomingEvents.mockResolvedValue({ items: [upcomingEvent] })
     joinEvent.mockResolvedValue({ status: 'joined' })
