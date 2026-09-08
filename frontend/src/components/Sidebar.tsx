@@ -1,4 +1,6 @@
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { getMe } from '../lib/api'
 
 interface NavItem {
   label: string
@@ -50,6 +52,28 @@ function NavRow({ label, active, disabled, icon, onClick }: NavItem) {
 // leave every row un-highlighted rather than falsely claiming to be Home.
 export function Sidebar({ active }: { active?: 'home' | 'search' | 'events' | 'people' | 'settings' }) {
   const navigate = useNavigate()
+  // Self-sufficient fetch, same pattern as AppHeader's own getMe() call —
+  // the Watchlist/Watched/Ratings & Reviews rows below each need the
+  // caller's own uid to deep-link into their Profile page's matching tab
+  // ("/profile/:myUid?tab=..."), which this component otherwise has no
+  // reason to know.
+  const [myUid, setMyUid] = useState<string | null>(null)
+  useEffect(() => {
+    let cancelled = false
+    getMe()
+      .then((me) => {
+        if (!cancelled) setMyUid(me.uid)
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  function openMyProfileTab(tab: 'watchlist' | 'watched' | 'reviews') {
+    if (myUid) navigate(`/profile/${myUid}?tab=${tab}`)
+  }
+
   return (
     <aside className="hidden w-58 flex-none flex-col gap-7 border-r border-border-soft px-4.5 py-6 lg:flex">
       <div>
@@ -135,7 +159,7 @@ export function Sidebar({ active }: { active?: 'home' | 'search' | 'events' | 'p
         <div className="mb-1.5 px-2.5 text-[11px] font-bold tracking-wider text-text-faint uppercase">My Movies</div>
         <NavRow
           label="Watchlist"
-          disabled
+          onClick={() => openMyProfileTab('watchlist')}
           icon={
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
               <path d="M6 3h12a1 1 0 0 1 1 1v17l-7-4-7 4V4a1 1 0 0 1 1-1z" />
@@ -144,7 +168,7 @@ export function Sidebar({ active }: { active?: 'home' | 'search' | 'events' | 'p
         />
         <NavRow
           label="Watched"
-          disabled
+          onClick={() => openMyProfileTab('watched')}
           icon={
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
               <circle cx="12" cy="12" r="9" />
@@ -154,7 +178,7 @@ export function Sidebar({ active }: { active?: 'home' | 'search' | 'events' | 'p
         />
         <NavRow
           label="Ratings & Reviews"
-          disabled
+          onClick={() => openMyProfileTab('reviews')}
           icon={
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
               <path d="M12 2.5l2.9 6.1 6.6.8-4.9 4.6 1.3 6.6L12 17.6 6.1 20.6l1.3-6.6-4.9-4.6 6.6-.8z" />

@@ -82,9 +82,9 @@ afterEach(() => {
 
 // Seeds two history entries so the "Back" button's navigate(-1) has
 // somewhere real to go — a bare single-entry history can't go back further.
-function renderWithRouter(uid = 'u1') {
+function renderWithRouter(uid = 'u1', search = '') {
   return render(
-    <MemoryRouter initialEntries={['/', `/profile/${uid}`]} initialIndex={1}>
+    <MemoryRouter initialEntries={['/', `/profile/${uid}${search}`]} initialIndex={1}>
       <Routes>
         <Route path="/" element={<p>Previous page</p>} />
         <Route path="/profile/:uid" element={<Profile />} />
@@ -320,6 +320,23 @@ describe('Profile', () => {
     expect(screen.getByRole('tab', { name: 'Watchlist' })).toBeEnabled()
     expect(screen.getByRole('tab', { name: 'Reviews' })).toBeEnabled()
     expect(screen.getByRole('tab', { name: 'Events' })).toBeEnabled()
+  })
+
+  it('opens directly on the tab named in a ?tab= query param — the sidebar\'s Watchlist/Watched/Reviews links deep-link here', async () => {
+    getUserProfile.mockResolvedValue({ ...baseProfile, relationship: 'self' })
+    getMyWatchlist.mockResolvedValue({ items: [{ movieId: 'm9', title: 'Parasite', poster: null, addedAt: null }], nextCursor: null })
+    renderWithRouter('u1', '?tab=watchlist')
+
+    expect(await screen.findByText('Parasite')).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: 'Watchlist', selected: true })).toBeInTheDocument()
+  })
+
+  it('ignores an unrecognized ?tab= value and falls back to Overview', async () => {
+    getUserProfile.mockResolvedValue(baseProfile)
+    renderWithRouter('u1', '?tab=nonsense')
+
+    await waitFor(() => expect(screen.getByText('Rohan')).toBeInTheDocument())
+    expect(screen.getByRole('tab', { name: 'Overview', selected: true })).toBeInTheDocument()
   })
 
   describe('Watched tab', () => {

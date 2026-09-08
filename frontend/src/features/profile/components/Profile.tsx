@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useEffect, useRef, useState } from 'react'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { getUserProfile, getUserReviews, type PublicProfile, type ProfileReviewEntry } from '../services/profileApi'
 import {
   followUser,
@@ -182,7 +182,13 @@ export function Profile() {
   // so a fast double-click fired two overlapping follow/unfollow requests.
   const [connectPending, setConnectPending] = useState(false)
 
-  const [tab, setTab] = useState<Tab>('overview')
+  const [searchParams] = useSearchParams()
+  // Deep-link entry point for Sidebar's Watchlist/Watched/Ratings & Reviews
+  // rows, which land here as /profile/:myUid?tab=watchlist etc. rather than
+  // always opening on Overview. An unrecognized value falls back to Overview
+  // instead of rendering nothing.
+  const initialTab = TABS.some((t) => t.id === searchParams.get('tab')) ? (searchParams.get('tab') as Tab) : 'overview'
+  const [tab, setTab] = useState<Tab>(initialTab)
   // Each tab's data is fetched lazily, once, the first time it's opened — not
   // upfront on mount. null means "not fetched yet" (distinct from "fetched
   // and empty"), so the loading state and the empty state never get confused.
@@ -198,13 +204,21 @@ export function Profile() {
   const [eventsLoading, setEventsLoading] = useState(false)
   const [tabError, setTabError] = useState('')
 
+  // Skips resetting `tab` back to Overview on this effect's very first run —
+  // the useState initializer above already set it correctly from the URL's
+  // ?tab= (if any) for the page's first load; only a later navigation to a
+  // *different* profile while this component stays mounted should snap back
+  // to Overview.
+  const mountedOnceRef = useRef(false)
+
   useEffect(() => {
     setProfile(null)
     setError('')
     // A fresh profile — reset every tab's lazily-fetched data too, so
     // navigating from one person's profile to another's doesn't show the
     // previous person's Watched/Reviews/Events under the new one.
-    setTab('overview')
+    if (mountedOnceRef.current) setTab('overview')
+    mountedOnceRef.current = true
     setWatched(null)
     setWatchedCursor(null)
     setWatchlist(null)

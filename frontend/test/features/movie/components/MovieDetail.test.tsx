@@ -87,6 +87,20 @@ function mockDefaults() {
   getMovieReviews.mockResolvedValue({ items: [], nextCursor: null })
 }
 
+// The Watchlist/Watched/Like action-bar buttons (ActionButton in
+// MovieDetail.tsx) share their exact accessible name with Sidebar's own
+// "Watchlist"/"Watched"/"Ratings & Reviews" nav rows (rendered for real
+// alongside this page, not mocked away) — an ordinary getAllByRole(...)[0]
+// stopped reliably picking the real toggle once Sidebar's rows became real
+// buttons instead of a disabled <div>. ActionButton is the only one of the
+// two that's an actual pressed/unpressed toggle (aria-pressed set), so that's
+// the real distinguishing feature — not DOM order, which is fragile.
+function actionButton(name: RegExp) {
+  const match = screen.getAllByRole('button', { name }).find((el) => el.hasAttribute('aria-pressed'))
+  if (!match) throw new Error(`No action-bar button found matching ${name}`)
+  return match
+}
+
 afterEach(() => {
   vi.clearAllMocks()
   authUser = { uid: 'uid-1' }
@@ -137,9 +151,9 @@ describe('MovieDetail', () => {
     getMovieReviews.mockResolvedValue({ items: [], nextCursor: null })
     renderWithRouter()
 
-    await waitFor(() => expect(screen.getAllByRole('button', { name: /watchlist/i })[0]).toHaveAttribute('aria-pressed', 'true'))
-    expect(screen.getAllByRole('button', { name: /^watched$/i })[0]).toHaveAttribute('aria-pressed', 'false')
-    expect(screen.getAllByRole('button', { name: /^like$/i })[0]).toHaveAttribute('aria-pressed', 'true')
+    await waitFor(() => expect(actionButton(/watchlist/i)).toHaveAttribute('aria-pressed', 'true'))
+    expect(actionButton(/^watched$/i)).toHaveAttribute('aria-pressed', 'false')
+    expect(actionButton(/^like$/i)).toHaveAttribute('aria-pressed', 'true')
   })
 
   it('toggling watchlist calls addToWatchlist optimistically and updates pressed state', async () => {
@@ -147,10 +161,10 @@ describe('MovieDetail', () => {
     addToWatchlist.mockResolvedValue(undefined)
     renderWithRouter()
 
-    await waitFor(() => expect(screen.getAllByRole('button', { name: /watchlist/i })[0]).toBeInTheDocument())
-    fireEvent.click(screen.getAllByRole('button', { name: /watchlist/i })[0])
+    await waitFor(() => expect(actionButton(/watchlist/i)).toBeInTheDocument())
+    fireEvent.click(actionButton(/watchlist/i))
 
-    expect(screen.getAllByRole('button', { name: /watchlist/i })[0]).toHaveAttribute('aria-pressed', 'true')
+    expect(actionButton(/watchlist/i)).toHaveAttribute('aria-pressed', 'true')
     await waitFor(() => expect(addToWatchlist).toHaveBeenCalledWith('movie-1'))
   })
 
@@ -159,10 +173,10 @@ describe('MovieDetail', () => {
     addToWatchlist.mockRejectedValue(new Error('network error'))
     renderWithRouter()
 
-    await waitFor(() => expect(screen.getAllByRole('button', { name: /watchlist/i })[0]).toBeInTheDocument())
-    fireEvent.click(screen.getAllByRole('button', { name: /watchlist/i })[0])
+    await waitFor(() => expect(actionButton(/watchlist/i)).toBeInTheDocument())
+    fireEvent.click(actionButton(/watchlist/i))
 
-    await waitFor(() => expect(screen.getAllByRole('button', { name: /watchlist/i })[0]).toHaveAttribute('aria-pressed', 'false'))
+    await waitFor(() => expect(actionButton(/watchlist/i)).toHaveAttribute('aria-pressed', 'false'))
     expect(screen.getByRole('alert')).toHaveTextContent('network error')
   })
 
@@ -172,9 +186,9 @@ describe('MovieDetail', () => {
     likeMovie.mockResolvedValue(undefined)
     renderWithRouter()
 
-    await waitFor(() => expect(screen.getAllByRole('button', { name: /^watched$/i })[0]).toBeInTheDocument())
-    fireEvent.click(screen.getAllByRole('button', { name: /^watched$/i })[0])
-    fireEvent.click(screen.getAllByRole('button', { name: /^like$/i })[0])
+    await waitFor(() => expect(actionButton(/^watched$/i)).toBeInTheDocument())
+    fireEvent.click(actionButton(/^watched$/i))
+    fireEvent.click(actionButton(/^like$/i))
 
     await waitFor(() => expect(markWatched).toHaveBeenCalledWith('movie-1'))
     await waitFor(() => expect(likeMovie).toHaveBeenCalledWith('movie-1'))
