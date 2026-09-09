@@ -199,12 +199,12 @@ describe('Settings', () => {
     await waitFor(() => expect(onUpdateMe).toHaveBeenCalledWith(updated))
   })
 
-  it('toggles "Hide me from public Discover suggestions"', async () => {
+  it('toggles "Hide me from the signed-out Discover page"', async () => {
     const updated = { ...baseMe, hideFromDiscovery: true }
     updateMe.mockResolvedValue(updated)
     const { onUpdateMe } = renderSettings()
 
-    const toggle = screen.getByRole('switch', { name: /hide me from public discover suggestions/i })
+    const toggle = screen.getByRole('switch', { name: /hide me from the signed-out discover page/i })
     expect(toggle).toHaveAttribute('aria-checked', 'false')
     fireEvent.click(toggle)
 

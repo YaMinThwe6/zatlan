@@ -347,13 +347,25 @@ export function Settings({ me, onUpdateMe }: Props) {
           </div>
           <div className="flex items-center gap-3.5 px-4.5 py-4">
             <div className="flex-1">
-              <p className="text-[13px] font-semibold text-text">Hide me from public Discover suggestions</p>
-              <p className="mt-0.5 text-[11px] text-text-muted">Keeps you out of "People you might vibe with" for visitors who haven't signed in yet.</p>
+              <p className="text-[13px] font-semibold text-text">Hide me from the signed-out Discover page</p>
+              {/* Real gap: the old copy ("Hide me from public Discover
+                  suggestions") read as "hide me from everyone" — a
+                  signed-in user turned this on and was surprised to still
+                  show up in People Discovery's suggestions, since this
+                  toggle only ever affected the signed-out guest Discover
+                  teaser (backend's getTopFollowedPeople), a completely
+                  different endpoint from signed-in People Discovery's
+                  getTasteMatches. Spelled out explicitly now so the two
+                  aren't conflated again. */}
+              <p className="mt-0.5 text-[11px] text-text-muted">
+                People browsing BINJ without an account won't see you in "People you might vibe with." Signed-in users can still find you
+                through People Discovery.
+              </p>
             </div>
             <ToggleSwitch
               checked={me.hideFromDiscovery}
               onChange={() => togglePrivacyField('hideFromDiscovery')}
-              label="Hide me from public Discover suggestions"
+              label="Hide me from the signed-out Discover page"
             />
           </div>
         </div>
