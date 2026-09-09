@@ -1,8 +1,11 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { sendMessage, deleteMessage, subscribeToMessages, type RoomMessage } from '../services/roomApi'
+import { getRoom, sendMessage, deleteMessage, subscribeToMessages, type RoomMessage, type RoomDetail } from '../services/roomApi'
 import { reportContent, type CreateReportResult } from '../../../lib/api'
 import { useAuth } from '../../../lib/AuthContext'
+import { Sidebar } from '../../../components/Sidebar'
+import { AppHeader } from '../../../components/AppHeader'
+import { MobileTabBar } from '../../../components/MobileTabBar'
 
 function formatTime(iso: string | null): string {
   if (!iso) return ''
@@ -29,8 +32,9 @@ export function RoomChat() {
   const { roomId: roomIdParam } = useParams<{ roomId: string }>()
   const roomId = roomIdParam!
   const navigate = useNavigate()
-  const { user } = useAuth()
+  const { user, signOutUser } = useAuth()
   const currentUid = user!.uid
+  const [room, setRoom] = useState<RoomDetail | null>(null)
   const [messages, setMessages] = useState<RoomMessage[]>([])
   const [connected, setConnected] = useState(false)
   const [error, setError] = useState('')
@@ -49,6 +53,26 @@ export function RoomChat() {
     })
     return unsubscribe
   }, [roomId])
+
+  useEffect(() => {
+    let cancelled = false
+    setRoom(null)
+    getRoom(roomId)
+      .then((res) => {
+        if (!cancelled) setRoom(res)
+      })
+      .catch(() => {
+        // Non-fatal — the header just falls back to the generic title, and
+        // messages render without an author label. The chat itself (Firestore
+        // subscription) doesn't depend on this succeeding.
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [roomId])
+
+  // uid -> displayName, for labelling each other member's messages.
+  const memberNames = new Map((room?.members ?? []).map((m) => [m.uid, m.displayName]))
 
   async function handleSend(e: React.FormEvent) {
     e.preventDefault()
@@ -95,38 +119,46 @@ export function RoomChat() {
   const visibleMessages = messages.filter((m) => !m.deleted)
 
   return (
-    // No design-canvas reference exists for this screen (it was built
-    // free-form, unlike the auth/onboarding/movie/profile screens) — a
-    // simple centered, width-capped column rather than a bespoke desktop
-    // layout, so the chat surface doesn't stretch edge-to-edge on a wide
-    // viewport.
-    <main className="mx-auto flex min-h-svh w-full max-w-2xl flex-col bg-bg text-text md:h-svh md:min-h-0 md:border-x md:border-border-soft">
-      <header className="flex items-center gap-3 border-b border-border-soft px-4 py-3.5">
-        <button
-          type="button"
-          onClick={() => navigate(-1)}
-          aria-label="Back"
-          className="flex h-[34px] w-[34px] items-center justify-center rounded-full border border-border-soft bg-surface-alt"
-        >
-          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-            <path d="M15 18l-6-6 6-6" />
-          </svg>
-        </button>
-        <h1 className="text-[15px] font-bold text-text">Room chat</h1>
-      </header>
+    <div className="flex min-h-svh bg-bg text-text lg:h-svh">
+      <Sidebar />
+      <main className="min-w-0 flex-1 lg:flex lg:flex-col">
+        <AppHeader onSignOut={() => void signOutUser()} />
 
-      {!connected && <p className="px-4 py-2 text-[12.5px] text-text-muted">Connecting…</p>}
-      {error && (
-        <p role="alert" className="px-4 py-2 text-[13px] text-red-400">
-          {error}
-        </p>
-      )}
+        {/* No design-canvas reference exists for this screen (it was built
+            free-form, unlike the auth/onboarding/movie/profile screens) — a
+            simple centered, width-capped column rather than a bespoke desktop
+            layout, so the chat surface doesn't stretch edge-to-edge on a wide
+            viewport. */}
+        <div className="mx-auto flex w-full max-w-2xl flex-1 flex-col lg:min-h-0 lg:border-x lg:border-border-soft">
+          <header className="flex items-center gap-3 border-b border-border-soft px-4 py-3.5">
+            <button
+              type="button"
+              onClick={() => navigate(-1)}
+              aria-label="Back"
+              className="flex h-[34px] w-[34px] items-center justify-center rounded-full border border-border-soft bg-surface-alt"
+            >
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M15 18l-6-6 6-6" />
+              </svg>
+            </button>
+            <h1 className="truncate text-[15px] font-bold text-text">{room?.eventTitle ?? 'Room chat'}</h1>
+          </header>
 
-      <ul className="flex flex-1 flex-col gap-3 overflow-y-auto px-4 py-4">
-        {visibleMessages.map((m) => {
+          {!connected && <p className="px-4 py-2 text-[12.5px] text-text-muted">Connecting…</p>}
+          {error && (
+            <p role="alert" className="px-4 py-2 text-[13px] text-red-400">
+              {error}
+            </p>
+          )}
+
+          <ul className="flex flex-1 flex-col gap-3 overflow-y-auto px-4 py-4">
+            {visibleMessages.map((m) => {
           const mine = m.authorId === currentUid
           return (
             <li key={m.messageId} className={`flex flex-col ${mine ? 'items-end' : 'items-start'}`}>
+              {!mine && (
+                <span className="mb-0.5 px-1 text-[10.5px] font-semibold text-text-muted">{memberNames.get(m.authorId) ?? 'Unknown'}</span>
+              )}
               <div
                 className={`max-w-[78%] rounded-2xl px-3.5 py-2.5 text-[13.5px] leading-relaxed ${
                   mine ? 'rounded-br-sm bg-accent text-bg' : 'rounded-bl-sm border border-border bg-input text-text'
@@ -213,6 +245,10 @@ export function RoomChat() {
           Send
         </button>
       </form>
-    </main>
+        </div>
+
+        <MobileTabBar active="profile" />
+      </main>
+    </div>
   )
 }

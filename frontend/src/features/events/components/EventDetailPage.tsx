@@ -14,7 +14,9 @@ import {
 } from '../../home/services/homeApi'
 import { posterUrl } from '../../../lib/images'
 import { formatEventDate } from '../../../lib/eventDate'
+import { useAuth } from '../../../lib/AuthContext'
 import { Sidebar } from '../../../components/Sidebar'
+import { AppHeader } from '../../../components/AppHeader'
 import { MobileTabBar } from '../../../components/MobileTabBar'
 
 interface Props {
@@ -28,6 +30,7 @@ function formatDate(iso: string | null): string {
 export function EventDetailPage({ me }: Props) {
   const { eventId } = useParams<{ eventId: string }>()
   const navigate = useNavigate()
+  const { signOutUser } = useAuth()
   const [event, setEvent] = useState<EventDetail | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -39,6 +42,11 @@ export function EventDetailPage({ me }: Props) {
   // frontend ever called them — a host had no way to act on a request
   // through the UI at all.
   const [joinRequests, setJoinRequests] = useState<EventJoinRequest[]>([])
+  // Read-only history for the host — who's already in, and who was turned
+  // down. Neither list supports any action; they're here purely so the host
+  // doesn't have to remember past decisions.
+  const [approvedRequests, setApprovedRequests] = useState<EventJoinRequest[]>([])
+  const [deniedRequests, setDeniedRequests] = useState<EventJoinRequest[]>([])
   // Per-request guard against a rapid double-click firing two overlapping
   // approve/deny calls for the same requester, same pattern used elsewhere
   // in the app (e.g. onboarding's WatchedStep).
@@ -57,7 +65,10 @@ export function EventDetailPage({ me }: Props) {
         if (res.viewerStatus === 'host' && res.requiresApproval) {
           getJoinRequests(eventId)
             .then((r) => {
-              if (!cancelled) setJoinRequests(r.items)
+              if (cancelled) return
+              setJoinRequests(r.requested)
+              setApprovedRequests(r.approved)
+              setDeniedRequests(r.denied)
             })
             .catch(() => {
               // A minor section on a page that already loaded successfully —
@@ -82,7 +93,9 @@ export function EventDetailPage({ me }: Props) {
     setActingOn((prev) => new Set(prev).add(requesterUid))
     try {
       await approveJoinRequest(eventId, requesterUid)
+      const requester = joinRequests.find((r) => r.uid === requesterUid)
       setJoinRequests((prev) => prev.filter((r) => r.uid !== requesterUid))
+      if (requester) setApprovedRequests((prev) => [...prev, requester])
       setEvent((prev) => (prev ? { ...prev, participantCount: prev.participantCount + 1 } : prev))
     } catch (err) {
       setActionError(err instanceof Error ? err.message : 'Failed to approve this request')
@@ -101,7 +114,9 @@ export function EventDetailPage({ me }: Props) {
     setActingOn((prev) => new Set(prev).add(requesterUid))
     try {
       await denyJoinRequest(eventId, requesterUid)
+      const requester = joinRequests.find((r) => r.uid === requesterUid)
       setJoinRequests((prev) => prev.filter((r) => r.uid !== requesterUid))
+      if (requester) setDeniedRequests((prev) => [...prev, requester])
     } catch (err) {
       setActionError(err instanceof Error ? err.message : 'Failed to deny this request')
     } finally {
@@ -154,6 +169,7 @@ export function EventDetailPage({ me }: Props) {
       <Sidebar active="events" />
 
       <main className="min-w-0 flex-1 pb-6 lg:flex lg:flex-col lg:overflow-y-auto lg:pb-10">
+        <AppHeader onSignOut={() => void signOutUser()} me={me} />
         <div className="mx-auto w-full max-w-2xl px-5 pt-4.5 lg:px-7 lg:pt-7">
           <button type="button" onClick={() => navigate('/events')} className="mb-4 text-[12.5px] font-semibold text-text-muted">
             ‹ Back to Events
@@ -202,6 +218,25 @@ export function EventDetailPage({ me }: Props) {
                     {event.location.area}, {event.location.city}
                   </div>
                 )}
+                {/* preciseLocation is only ever non-null in the response for
+                    the host or an already-joined participant (backend's own
+                    privacy gate, events.service.ts's toEventSummary) — no
+                    extra viewerStatus check needed here, trusting that gate
+                    rather than duplicating it client-side. */}
+                {event.mode === 'in-person' && event.preciseLocation && (
+                  <a
+                    href={`https://www.google.com/maps/dir/?api=1&destination=${event.preciseLocation.lat},${event.preciseLocation.lng}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex w-fit items-center gap-1.5 text-[12.5px] font-bold text-accent"
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                      <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
+                      <circle cx="12" cy="10" r="3" />
+                    </svg>
+                    Get directions
+                  </a>
+                )}
                 <div className="text-[12.5px] text-text-muted">
                   {event.participantCount}/{event.participantLimit} going
                   {event.requiresApproval ? ' · requires host approval' : ''}
@@ -235,6 +270,36 @@ export function EventDetailPage({ me }: Props) {
                             Deny
                           </button>
                         </div>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {viewerStatus === 'host' && approvedRequests.length > 0 && (
+                <div className="flex flex-col gap-3 rounded-2xl border border-border-soft bg-surface p-4">
+                  <h2 className="text-[13px] font-bold text-text">
+                    Approved <span className="text-text-muted">({approvedRequests.length})</span>
+                  </h2>
+                  <ul className="flex flex-col gap-2">
+                    {approvedRequests.map((request) => (
+                      <li key={request.uid} className="text-[13px] text-text">
+                        {request.displayName}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {viewerStatus === 'host' && deniedRequests.length > 0 && (
+                <div className="flex flex-col gap-3 rounded-2xl border border-border-soft bg-surface p-4">
+                  <h2 className="text-[13px] font-bold text-text">
+                    Denied <span className="text-text-muted">({deniedRequests.length})</span>
+                  </h2>
+                  <ul className="flex flex-col gap-2">
+                    {deniedRequests.map((request) => (
+                      <li key={request.uid} className="text-[13px] text-text-muted">
+                        {request.displayName}
                       </li>
                     ))}
                   </ul>

@@ -388,7 +388,8 @@ describe('MovieDetail', () => {
     renderWithRouter()
 
     await waitFor(() => expect(screen.getByText('Dune: Part Two')).toBeInTheDocument())
-    expect(screen.getByRole('button', { name: /our story/i })).toBeInTheDocument() // Sidebar nav
+    // Sidebar nav (desktop) + MobileTabBar (mobile) each offer "Our Story"
+    expect(screen.getAllByRole('button', { name: /our story/i }).length).toBeGreaterThan(0)
     expect(await screen.findByText('Yamin')).toBeInTheDocument() // AppHeader's identity, once getMe resolves
   })
 })

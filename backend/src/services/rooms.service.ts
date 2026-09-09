@@ -1,12 +1,26 @@
 import { requireDb } from "../lib/firebaseAdmin.js";
 import { AppError } from "../utils/AppError.js";
+import { writeNotification } from "../lib/notify.js";
 import { createEvent, type CreateEventInput } from "./events.service.js";
 
 const MAX_MESSAGE_LENGTH = 2000;
+const CHAT_ACTIVE_NOTIFY_WINDOW_MS = 30 * 60 * 1000;
+
+function toMillis(value: FirebaseFirestore.Timestamp | Date | undefined): number {
+  if (!value) return 0;
+  return value instanceof Date ? value.getTime() : value.toDate().getTime();
+}
 
 function toIso(value: FirebaseFirestore.Timestamp | Date | null): string | null {
   if (!value) return null;
   return value instanceof Date ? value.toISOString() : value.toDate().toISOString();
+}
+
+export interface RoomDetail {
+  roomId: string;
+  type: "ephemeral" | "persistent";
+  eventTitle: string;
+  members: { uid: string; displayName: string }[];
 }
 
 async function requireRoom(roomId: string) {
@@ -24,6 +38,36 @@ function requireMember(uid: string, room: FirebaseFirestore.DocumentData): void 
   if (!memberIds.includes(uid)) {
     throw new AppError("FORBIDDEN", "You're not a member of this room", 403);
   }
+}
+
+// GET /rooms/:roomId — member-only. RoomChat.tsx's own header/message-author
+// labels need this: messages themselves only ever carry a bare authorId
+// (reads bypass the backend entirely, straight from Firestore — see
+// sendMessage's comment below), so this is the one place that resolves the
+// room back to its event's title and its members' display names.
+export async function getRoomDetail(uid: string, roomId: string): Promise<RoomDetail> {
+  const { db, room } = await requireRoom(roomId);
+  requireMember(uid, room);
+
+  const memberIds = (room.memberIds as string[] | undefined) ?? [];
+  const [eventSnap, memberSnaps] = await Promise.all([
+    db.collection("events").doc(room.originEventId as string).get(),
+    Promise.all(memberIds.map((memberId) => db.collection("users").doc(memberId).get()))
+  ]);
+  const eventData = eventSnap.data();
+  const movieId = eventData?.movieId as string | undefined;
+  const movieSnap = movieId ? await db.collection("movies").doc(movieId).get() : null;
+  const eventTitle = (eventData?.title as string | null | undefined) ?? (movieSnap?.data()?.title as string | undefined) ?? "Watch party";
+
+  return {
+    roomId,
+    type: room.type as "ephemeral" | "persistent",
+    eventTitle,
+    members: memberIds.map((memberId, i) => ({
+      uid: memberId,
+      displayName: (memberSnaps[i].data()?.displayName as string | undefined) ?? "Unknown"
+    }))
+  };
 }
 
 // POST /rooms/:roomId/messages — hld.md §16. Reads bypass this entirely (the
@@ -50,6 +94,15 @@ export async function sendMessage(uid: string, roomId: string, rawText: unknown)
   const messageRef = roomRef.collection("messages").doc();
   const now = new Date();
   await messageRef.set({ authorId: uid, text, createdAt: now, editedAt: null, deleted: false });
+
+  // "This chat is live" rather than "you have a new message" — throttled per
+  // room so an active conversation doesn't spam every member on every reply.
+  const lastNotifiedMs = toMillis(room.lastChatNotifiedAt as FirebaseFirestore.Timestamp | Date | undefined);
+  if (now.getTime() - lastNotifiedMs >= CHAT_ACTIVE_NOTIFY_WINDOW_MS) {
+    await roomRef.update({ lastChatNotifiedAt: now });
+    const memberIds = (room.memberIds as string[] | undefined) ?? [];
+    await Promise.all(memberIds.filter((memberId) => memberId !== uid).map((memberId) => writeNotification(memberId, "chatActive", uid, "room", roomId)));
+  }
 
   return { messageId: messageRef.id, createdAt: toIso(now) };
 }

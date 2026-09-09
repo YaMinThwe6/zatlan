@@ -106,10 +106,13 @@ describe('NearbyEvents', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /^join$/i }))
     await waitFor(() => expect(joinEvent).toHaveBeenCalledWith('evt-1'))
-    expect(await screen.findByRole('button', { name: 'Joined' })).toBeDisabled()
+    // Chat, not a disabled "Joined" — you're in, so the button takes you
+    // straight to the room instead of just sitting there inert.
+    expect(await screen.findByRole('button', { name: /^chat$/i })).not.toBeDisabled()
+    expect(screen.queryByRole('button', { name: 'Joined' })).not.toBeInTheDocument()
   })
 
-  it('offers a Chat button once joined, opening the event\'s room', async () => {
+  it('the Join button becomes Chat once joined, opening the event\'s room', async () => {
     getNearbyEvents.mockResolvedValue({ items: [event] })
     joinEvent.mockResolvedValue({ status: 'joined' })
     Object.defineProperty(navigator, 'geolocation', {
@@ -126,7 +129,8 @@ describe('NearbyEvents', () => {
     await screen.findByText('Rooftop Watch Party')
 
     fireEvent.click(screen.getByRole('button', { name: /^join$/i }))
-    fireEvent.click(await screen.findByRole('button', { name: /^chat$/i }))
+    expect(await screen.findAllByRole('button', { name: /^chat$/i })).toHaveLength(1) // one button, not Joined+Chat side by side
+    fireEvent.click(screen.getByRole('button', { name: /^chat$/i }))
 
     expect(await screen.findByText('Room chat page')).toBeInTheDocument()
   })

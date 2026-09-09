@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react'
-import { MemoryRouter, Routes, Route } from 'react-router-dom'
+import { MemoryRouter, Routes, Route, Link } from 'react-router-dom'
 
 const getUserProfile = vi.fn()
 const getUserReviews = vi.fn().mockResolvedValue({ items: [] })
@@ -337,6 +337,37 @@ describe('Profile', () => {
 
     await waitFor(() => expect(screen.getByText('Rohan')).toBeInTheDocument())
     expect(screen.getByRole('tab', { name: 'Overview', selected: true })).toBeInTheDocument()
+  })
+
+  // Real bug: Sidebar's Watchlist/Watched/Reviews links navigate to
+  // /profile/:myUid?tab=... — while already sitting on your own profile page,
+  // that's a same-route, query-only navigation, so Profile never unmounts.
+  // The ?tab= was only ever read once, via useState's initializer on first
+  // mount, so a second click did nothing visible at all.
+  it('switches tabs on a same-page ?tab= navigation, not just on first mount — clicking a Sidebar profile link while already on your own profile', async () => {
+    getUserProfile.mockResolvedValue({ ...baseProfile, relationship: 'self' })
+    getMyWatched.mockResolvedValue({ items: [{ movieId: 'm7', title: 'Whiplash', poster: null, watchedAt: null }], nextCursor: null })
+    render(
+      <MemoryRouter initialEntries={['/profile/u1']}>
+        <Routes>
+          <Route
+            path="/profile/:uid"
+            element={
+              <>
+                <Link to="/profile/u1?tab=watched">Go to Watched</Link>
+                <Profile />
+              </>
+            }
+          />
+        </Routes>
+      </MemoryRouter>
+    )
+
+    await waitFor(() => expect(screen.getByRole('tab', { name: 'Overview', selected: true })).toBeInTheDocument())
+    fireEvent.click(screen.getByText('Go to Watched'))
+
+    expect(await screen.findByText('Whiplash')).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: 'Watched', selected: true })).toBeInTheDocument()
   })
 
   describe('Watched tab', () => {

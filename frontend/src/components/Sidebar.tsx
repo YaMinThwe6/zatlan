@@ -15,18 +15,22 @@ function NavRow({ label, active, disabled, icon, onClick }: NavItem) {
     <span
       className={
         active
-          ? 'flex items-center gap-2.5 rounded-[10px] bg-[rgba(var(--accent-rgb),0.12)] px-2.5 py-2.5 text-[13px] font-bold text-accent'
+          ? 'flex min-w-0 items-center gap-2.5 rounded-[10px] bg-[rgba(var(--accent-rgb),0.12)] px-2.5 py-2.5 text-[13px] font-bold text-accent'
           : disabled
-            ? 'flex items-center gap-2.5 rounded-[10px] px-2.5 py-2.5 text-[13px] font-semibold text-text-faint'
-            : 'flex items-center gap-2.5 rounded-[10px] px-2.5 py-2.5 text-[13px] font-semibold text-text-secondary'
+            ? 'flex min-w-0 items-center gap-2.5 rounded-[10px] px-2.5 py-2.5 text-[13px] font-semibold text-text-faint'
+            : 'flex min-w-0 items-center gap-2.5 rounded-[10px] px-2.5 py-2.5 text-[13px] font-semibold text-text-secondary'
       }
     >
       {icon}
-      {label}
+      <span className="truncate">{label}</span>
     </span>
   )
   if (disabled) {
     return (
+      // min-w-0 on content (above) lets a longer label (e.g. "Communities")
+      // shrink/truncate instead of pushing the "Coming soon" badge past the
+      // sidebar's own width — real bug: it was overlapping the panel's right
+      // border.
       <div title="Coming soon" className="flex cursor-default items-center justify-between gap-2">
         {content}
         <span className="flex-none rounded-full bg-[rgba(155,171,196,0.14)] px-2 py-0.5 text-[9.5px] font-bold text-text-faint">Coming soon</span>

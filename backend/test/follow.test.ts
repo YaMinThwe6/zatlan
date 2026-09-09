@@ -156,6 +156,19 @@ describe("PUT /users/:uid/follow", () => {
     const res = await authed(app, "put", "/users/uid-2/follow");
     expect(res.status).toBe(200);
     expect(res.body.data).toEqual({ status: "following" });
+
+    const notifications = [...store.entries()].filter(([key]) => key.startsWith("users/uid-2/notifications/"));
+    expect(notifications).toHaveLength(0); // already following — no repeat "new follower" spam
+  });
+
+  it("notifies the target of a new follower when following doesn't require approval", async () => {
+    store.set("users/uid-2", { followRequiresApproval: false });
+    const app = createApp();
+    await authed(app, "put", "/users/uid-2/follow");
+
+    const notifications = [...store.entries()].filter(([key]) => key.startsWith("users/uid-2/notifications/"));
+    expect(notifications).toHaveLength(1);
+    expect(notifications[0][1]).toMatchObject({ type: "newFollower", fromUserId: "uid-1", targetType: "user", targetId: "uid-1" });
   });
 });
 

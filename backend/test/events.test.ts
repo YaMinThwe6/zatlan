@@ -477,14 +477,21 @@ describe("join request approval", () => {
     expect(res.status).toBe(403);
   });
 
-  it("GET joinRequests returns each pending requester's uid and displayName, for the host to approve/deny against", async () => {
+  it("GET joinRequests returns pending, approved, and denied requesters as separate lists, for the host to review all three", async () => {
     store.set("events/evt-1", { hostId: "host-1", movieId: "movie-1" });
-    store.set("events/evt-1/joinRequests/guest-1", { createdAt: new Date() });
+    store.set("events/evt-1/joinRequests/guest-1", { createdAt: new Date(), status: "pending" });
+    store.set("events/evt-1/joinRequests/guest-2", { createdAt: new Date(), status: "denied" });
+    store.set("events/evt-1/participants/guest-3", { joinedAt: new Date() });
+    store.set("events/evt-1/participants/host-1", { joinedAt: new Date() }); // the host's own auto-join — not an "approved" requester
     store.set("users/guest-1", { displayName: "Meera" });
+    store.set("users/guest-2", { displayName: "Vikram" });
+    store.set("users/guest-3", { displayName: "Priya" });
     const app = createApp(); // currentUid stays "host-1"
     const res = await authed(app, "get", "/events/evt-1/joinRequests");
     expect(res.status).toBe(200);
-    expect(res.body.data.items).toEqual([{ uid: "guest-1", displayName: "Meera" }]);
+    expect(res.body.data.requested).toEqual([{ uid: "guest-1", displayName: "Meera" }]);
+    expect(res.body.data.approved).toEqual([{ uid: "guest-3", displayName: "Priya" }]);
+    expect(res.body.data.denied).toEqual([{ uid: "guest-2", displayName: "Vikram" }]);
   });
 
   it("approve moves the pending request into participants and increments the count", async () => {
@@ -509,14 +516,39 @@ describe("join request approval", () => {
     expect(store.has("events/evt-1/joinRequests/guest-1")).toBe(true); // left pending, not silently dropped
   });
 
-  it("deny just clears the request", async () => {
+  it("deny marks the request denied rather than deleting it, so the host can still see it was denied", async () => {
     store.set("events/evt-1", { hostId: "host-1", movieId: "movie-1" });
-    store.set("events/evt-1/joinRequests/guest-1", { createdAt: new Date() });
+    store.set("events/evt-1/joinRequests/guest-1", { createdAt: new Date(), status: "pending" });
     const app = createApp();
     const res = await authed(app, "post", "/events/evt-1/joinRequests/guest-1/deny");
     expect(res.status).toBe(204);
-    expect(store.has("events/evt-1/joinRequests/guest-1")).toBe(false);
+    expect((store.get("events/evt-1/joinRequests/guest-1") as { status: string }).status).toBe("denied");
     expect(store.has("events/evt-1/participants/guest-1")).toBe(false);
+  });
+
+  it("lets a denied requester ask again — re-requesting reopens it as pending and re-notifies the host", async () => {
+    store.set("events/evt-1", { hostId: "host-1", movieId: "movie-1", requiresApproval: true, participantCount: 1, participantLimit: 5 });
+    store.set("events/evt-1/joinRequests/guest-1", { createdAt: new Date("2020-01-01"), status: "denied" });
+    currentUid = "guest-1";
+    const app = createApp();
+    const res = await authed(app, "put", "/events/evt-1/join");
+    expect(res.body.data).toEqual({ status: "pending" });
+    expect((store.get("events/evt-1/joinRequests/guest-1") as { status: string }).status).toBe("pending");
+
+    const hostNotifications = [...store.entries()].filter(([key]) => key.startsWith("users/host-1/notifications/"));
+    expect(hostNotifications).toHaveLength(1);
+    expect(hostNotifications[0][1]).toMatchObject({ type: "eventJoinRequest", fromUserId: "guest-1" });
+  });
+
+  it("deny notifies the requester", async () => {
+    store.set("events/evt-1", { hostId: "host-1", movieId: "movie-1" });
+    store.set("events/evt-1/joinRequests/guest-1", { createdAt: new Date() });
+    const app = createApp();
+    await authed(app, "post", "/events/evt-1/joinRequests/guest-1/deny");
+
+    const notifications = [...store.entries()].filter(([key]) => key.startsWith("users/guest-1/notifications/"));
+    expect(notifications).toHaveLength(1);
+    expect(notifications[0][1]).toMatchObject({ type: "eventJoinDenied", fromUserId: "host-1", targetType: "event", targetId: "evt-1" });
   });
 
   // Full-stack, one continuous flow through the real HTTP request chain —
@@ -562,15 +594,16 @@ describe("join request approval", () => {
     // 4. Host sees the pending request listed, with the requester's name.
     currentUid = "host-1";
     const requests = await authed(app, "get", `/events/${eventId}/joinRequests`);
-    expect(requests.body.data.items).toEqual([{ uid: "guest-1", displayName: "Rohan" }]);
+    expect(requests.body.data.requested).toEqual([{ uid: "guest-1", displayName: "Rohan" }]);
 
     // 5. Host approves it.
     const approveRes = await authed(app, "post", `/events/${eventId}/joinRequests/guest-1/approve`);
     expect(approveRes.status).toBe(204);
 
-    // 6. The request is gone from the host's list.
+    // 6. The request has moved from "requested" to "approved" on the host's list.
     const requestsAfter = await authed(app, "get", `/events/${eventId}/joinRequests`);
-    expect(requestsAfter.body.data.items).toEqual([]);
+    expect(requestsAfter.body.data.requested).toEqual([]);
+    expect(requestsAfter.body.data.approved).toEqual([{ uid: "guest-1", displayName: "Rohan" }]);
 
     // 7. The requester is now a real participant, room member, and the
     // event's headcount reflects it — a fresh GET, not the approve response,
@@ -907,6 +940,14 @@ describe("GET /events/requested", () => {
     const res = await authed(app, "get", "/events/requested");
     expect(res.body.data.items).toEqual([]);
   });
+
+  it("excludes a request the host has denied — it's no longer outstanding", async () => {
+    store.set("events/evt-1", { hostId: "host-2", movieId: "movie-1", visibility: "public", datetime: new Date("2099-06-01"), participantCount: 1, participantLimit: 5, requiresApproval: true });
+    store.set("events/evt-1/joinRequests/host-1", { createdAt: new Date(), status: "denied" });
+    const app = createApp();
+    const res = await authed(app, "get", "/events/requested");
+    expect(res.body.data.items).toEqual([]);
+  });
 });
 
 describe("GET /events/:eventId", () => {
@@ -1093,5 +1134,107 @@ describe("DELETE /events/:eventId", () => {
     currentUid = "guest-1";
     const join = await authed(app, "put", `/events/${eventId}/join`);
     expect(join.status).toBe(404);
+  });
+});
+
+describe("POST /events/remind", () => {
+  function remind(app: ReturnType<typeof createApp>, secret?: string) {
+    const req = request(app).post("/events/remind");
+    return secret === undefined ? req : req.set("X-Cron-Secret", secret);
+  }
+
+  it("403s without the cron secret", async () => {
+    const app = createApp();
+    const res = await remind(app);
+    expect(res.status).toBe(403);
+  });
+
+  it("403s with the wrong cron secret", async () => {
+    const app = createApp();
+    const res = await remind(app, "not-the-secret");
+    expect(res.status).toBe(403);
+  });
+
+  it("notifies the host and participants separately, ~24h before an event that hasn't been reminded yet", async () => {
+    store.set("users/host-1", { displayName: "Meera" });
+    store.set("events/evt-1", {
+      hostId: "host-1",
+      movieId: "movie-1",
+      datetime: new Date(Date.now() + 20 * 60 * 60 * 1000) // 20h out — inside the 24h window
+    });
+    store.set("events/evt-1/participants/host-1", { joinedAt: new Date() });
+    store.set("events/evt-1/participants/guest-1", { joinedAt: new Date() });
+    store.set("events/evt-1/participants/guest-2", { joinedAt: new Date() });
+
+    const app = createApp();
+    const res = await remind(app, "test-cron-secret");
+    expect(res.status).toBe(204);
+
+    const hostNotifications = [...store.entries()].filter(([key]) => key.startsWith("users/host-1/notifications/"));
+    expect(hostNotifications).toHaveLength(1);
+    expect(hostNotifications[0][1]).toMatchObject({ type: "eventReminderHost24h", targetType: "event", targetId: "evt-1" });
+
+    const guest1Notifications = [...store.entries()].filter(([key]) => key.startsWith("users/guest-1/notifications/"));
+    expect(guest1Notifications).toHaveLength(1);
+    expect(guest1Notifications[0][1]).toMatchObject({ type: "eventReminderParticipant24h", targetType: "event", targetId: "evt-1" });
+
+    const guest2Notifications = [...store.entries()].filter(([key]) => key.startsWith("users/guest-2/notifications/"));
+    expect(guest2Notifications).toHaveLength(1);
+
+    expect((store.get("events/evt-1") as { reminder24hSentAt: unknown }).reminder24hSentAt).toBeTruthy();
+  });
+
+  it("also sends the ~1h reminder, separately from the 24h one, when an event is inside both windows", async () => {
+    store.set("users/host-1", { displayName: "Meera" });
+    store.set("events/evt-1", {
+      hostId: "host-1",
+      movieId: "movie-1",
+      datetime: new Date(Date.now() + 30 * 60 * 1000) // 30 minutes out — inside both windows
+    });
+    store.set("events/evt-1/participants/host-1", { joinedAt: new Date() });
+    store.set("events/evt-1/participants/guest-1", { joinedAt: new Date() });
+
+    const app = createApp();
+    const res = await remind(app, "test-cron-secret");
+    expect(res.status).toBe(204);
+
+    const hostNotifications = [...store.entries()].filter(([key]) => key.startsWith("users/host-1/notifications/"));
+    const types = hostNotifications.map(([, data]) => (data as { type: string }).type);
+    expect(types).toContain("eventReminderHost24h");
+    expect(types).toContain("eventReminderHost1h");
+
+    const evt = store.get("events/evt-1") as { reminder24hSentAt: unknown; reminder1hSentAt: unknown };
+    expect(evt.reminder24hSentAt).toBeTruthy();
+    expect(evt.reminder1hSentAt).toBeTruthy();
+  });
+
+  it("doesn't re-notify an event whose 24h reminder was already sent", async () => {
+    store.set("users/host-1", { displayName: "Meera" });
+    store.set("events/evt-1", {
+      hostId: "host-1",
+      movieId: "movie-1",
+      datetime: new Date(Date.now() + 20 * 60 * 60 * 1000),
+      reminder24hSentAt: new Date()
+    });
+    store.set("events/evt-1/participants/host-1", { joinedAt: new Date() });
+
+    const app = createApp();
+    await remind(app, "test-cron-secret");
+
+    const hostNotifications = [...store.entries()].filter(([key]) => key.startsWith("users/host-1/notifications/"));
+    expect(hostNotifications).toHaveLength(0);
+  });
+
+  it("ignores an event more than 24h out, a past event, and a soft-deleted event", async () => {
+    store.set("users/host-1", { displayName: "Meera" });
+    store.set("events/too-far", { hostId: "host-1", movieId: "movie-1", datetime: new Date(Date.now() + 48 * 60 * 60 * 1000) });
+    store.set("events/already-happened", { hostId: "host-1", movieId: "movie-1", datetime: new Date(Date.now() - 60 * 60 * 1000) });
+    store.set("events/cancelled", { hostId: "host-1", movieId: "movie-1", datetime: new Date(Date.now() + 60 * 60 * 1000), deleted: true });
+
+    const app = createApp();
+    await remind(app, "test-cron-secret");
+
+    const hostNotifications = [...store.entries()].filter(([key]) => key.startsWith("users/host-1/notifications/"));
+    expect(hostNotifications).toHaveLength(0);
   });
 });

@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { getUpcomingEvents, getHostedEvents, joinEvent, type UpcomingEvent } from '../../home/services/homeApi'
+import { useAuth } from '../../../lib/AuthContext'
 import { Sidebar } from '../../../components/Sidebar'
+import { AppHeader } from '../../../components/AppHeader'
 import { MobileTabBar } from '../../../components/MobileTabBar'
 import { posterUrl } from '../../../lib/images'
 import { formatEventDate as formatDate, eventDateGroup, type EventDateGroup } from '../../../lib/eventDate'
@@ -25,6 +27,7 @@ const GROUP_LABELS: Record<EventDateGroup, string> = {
 // re-fetch, this is just optimistic UI while that round-trip is in flight.
 export function EventsPage() {
   const navigate = useNavigate()
+  const { signOutUser } = useAuth()
   const [tab, setTab] = useState<Tab>('upcoming')
   const [items, setItems] = useState<UpcomingEvent[]>([])
   const [loading, setLoading] = useState(true)
@@ -100,6 +103,7 @@ export function EventsPage() {
       <Sidebar active="events" />
 
       <main className="min-w-0 flex-1 pb-6 lg:flex lg:flex-col lg:pb-0">
+        <AppHeader onSignOut={() => void signOutUser()} />
         <header className="flex items-center justify-between px-5 pt-4.5 lg:border-b lg:border-border-soft lg:px-7 lg:py-4.5">
           <div>
             <h1 className="text-[19px] font-bold text-text lg:text-[18px]">Events</h1>

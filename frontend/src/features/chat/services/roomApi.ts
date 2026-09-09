@@ -1,8 +1,12 @@
 import { collection, onSnapshot, orderBy, query } from 'firebase/firestore'
 import { apiFetch } from '../../../lib/api'
 import { firestore } from '../../../lib/firebase'
-export type { RoomMessage } from '@binj/shared-types'
-import type { RoomMessage } from '@binj/shared-types'
+export type { RoomMessage, RoomDetail, RoomMember } from '@binj/shared-types'
+import type { RoomMessage, RoomDetail } from '@binj/shared-types'
+
+export function getRoom(roomId: string): Promise<RoomDetail> {
+  return apiFetch(`/rooms/${encodeURIComponent(roomId)}`, { auth: true })
+}
 
 export function sendMessage(roomId: string, text: string): Promise<{ messageId: string; createdAt: string | null }> {
   return apiFetch(`/rooms/${encodeURIComponent(roomId)}/messages`, { method: 'POST', body: { text }, auth: true })

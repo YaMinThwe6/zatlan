@@ -28,6 +28,7 @@ export async function followUser(callerUid: string, targetUid: string): Promise<
   if (!targetSnap.data()?.followRequiresApproval) {
     const followersRef = db.collection("users").doc(targetUid).collection("followers").doc(callerUid);
     await db.batch().set(followingRef, { createdAt: new Date() }).set(followersRef, { createdAt: new Date() }).commit();
+    await writeNotification(targetUid, "newFollower", callerUid, "user", callerUid);
     return { status: "following" };
   }
 

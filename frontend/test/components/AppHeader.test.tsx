@@ -6,7 +6,9 @@ const getMe = vi.fn()
 vi.mock('../../src/lib/api', () => ({ getMe }))
 
 const getNotifications = vi.fn()
-vi.mock('../../src/features/home/services/homeApi', () => ({ getNotifications }))
+const markNotificationRead = vi.fn()
+const clearAllNotifications = vi.fn()
+vi.mock('../../src/features/home/services/homeApi', () => ({ getNotifications, markNotificationRead, clearAllNotifications }))
 
 const { AppHeader } = await import('../../src/components/AppHeader')
 
@@ -32,6 +34,8 @@ const me = {
 afterEach(() => {
   getMe.mockReset()
   getNotifications.mockReset()
+  markNotificationRead.mockReset()
+  clearAllNotifications.mockReset()
 })
 
 function renderWithRouter(onSignOut = vi.fn(), meProp?: typeof me) {
@@ -41,6 +45,7 @@ function renderWithRouter(onSignOut = vi.fn(), meProp?: typeof me) {
         <Route path="/" element={<AppHeader onSignOut={onSignOut} me={meProp} />} />
         <Route path="/search" element={<p>Search page</p>} />
         <Route path="/profile/:uid" element={<p>Profile page</p>} />
+        <Route path="/notifications" element={<p>Notifications page</p>} />
       </Routes>
     </MemoryRouter>
   )
@@ -62,7 +67,10 @@ describe('AppHeader', () => {
 
     expect(await screen.findByText('Arjun')).toBeInTheDocument()
     expect(screen.getByText('A')).toBeInTheDocument() // avatar initial
-    expect(screen.getByLabelText('2 unread notifications')).toBeInTheDocument()
+    // NotificationBell fetches its own badge count independently of the
+    // identity fetch above — a separate async effect, not guaranteed to
+    // settle in the same tick, so this needs its own wait.
+    expect(await screen.findByLabelText('2 unread notifications')).toBeInTheDocument()
   })
 
   it('navigates to Search when the search bar is clicked', async () => {
@@ -81,6 +89,16 @@ describe('AppHeader', () => {
 
     fireEvent.click(await screen.findByRole('button', { name: /arjun/i }))
     expect(await screen.findByText('Profile page')).toBeInTheDocument()
+  })
+
+  it('opens the notification dropdown when the bell is clicked, with a View all link to the full page', async () => {
+    getMe.mockResolvedValue(me)
+    getNotifications.mockResolvedValue({ items: [] })
+    renderWithRouter()
+
+    fireEvent.click(await screen.findByLabelText('0 unread notifications'))
+    fireEvent.click(await screen.findByRole('button', { name: /view all/i }))
+    expect(await screen.findByText('Notifications page')).toBeInTheDocument()
   })
 
   it('calls onSignOut when Sign out is clicked', async () => {

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, afterEach } from 'vitest'
+import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { MemoryRouter, Routes, Route } from 'react-router-dom'
 
@@ -9,6 +9,8 @@ const deleteEvent = vi.fn()
 const getJoinRequests = vi.fn()
 const approveJoinRequest = vi.fn()
 const denyJoinRequest = vi.fn()
+// AppHeader's own dependency — the shared shell every signed-in page renders.
+const getNotifications = vi.fn()
 vi.mock('../../../../src/features/home/services/homeApi', () => ({
   getEvent,
   joinEvent,
@@ -16,10 +18,19 @@ vi.mock('../../../../src/features/home/services/homeApi', () => ({
   deleteEvent,
   getJoinRequests,
   approveJoinRequest,
-  denyJoinRequest
+  denyJoinRequest,
+  getNotifications
+}))
+vi.mock('../../../../src/lib/AuthContext', () => ({
+  useAuth: () => ({ signOutUser: vi.fn() })
 }))
 
 const { EventDetailPage } = await import('../../../../src/features/events/components/EventDetailPage')
+
+beforeEach(() => {
+  // AppHeader's own fetch — not this file's focus.
+  getNotifications.mockResolvedValue({ items: [] })
+})
 
 afterEach(() => {
   getEvent.mockReset()
@@ -29,6 +40,7 @@ afterEach(() => {
   getJoinRequests.mockReset()
   approveJoinRequest.mockReset()
   denyJoinRequest.mockReset()
+  getNotifications.mockReset()
   vi.restoreAllMocks()
 })
 
@@ -110,6 +122,46 @@ describe('EventDetailPage', () => {
     expect(screen.queryByRole('button', { name: 'Join event' })).not.toBeInTheDocument()
   })
 
+  describe('in-person event location', () => {
+    const inPersonEvent = {
+      ...baseEvent,
+      mode: 'in-person' as const,
+      location: { area: 'Bandra West', city: 'Mumbai' }
+    }
+
+    it('shows a Get directions link to Google Maps once joined and the backend has released the exact coordinates', async () => {
+      getEvent.mockResolvedValue({ ...inPersonEvent, viewerStatus: 'joined', preciseLocation: { lat: 19.0596, lng: 72.8295 } })
+      renderAt()
+
+      const link = await screen.findByRole('link', { name: /get directions/i })
+      expect(link).toHaveAttribute('href', 'https://www.google.com/maps/dir/?api=1&destination=19.0596,72.8295')
+      expect(link).toHaveAttribute('target', '_blank')
+    })
+
+    it('shows the host their own event\'s directions too', async () => {
+      getEvent.mockResolvedValue({ ...inPersonEvent, viewerStatus: 'host', preciseLocation: { lat: 19.0596, lng: 72.8295 } })
+      renderAt()
+
+      expect(await screen.findByRole('link', { name: /get directions/i })).toBeInTheDocument()
+    })
+
+    it('does not show a directions link before joining — the backend never releases exact coordinates pre-join', async () => {
+      getEvent.mockResolvedValue({ ...inPersonEvent, viewerStatus: 'none', preciseLocation: null })
+      renderAt()
+
+      await screen.findByText('Bandra West, Mumbai')
+      expect(screen.queryByRole('link', { name: /get directions/i })).not.toBeInTheDocument()
+    })
+
+    it('shows no directions link for an online event even if joined', async () => {
+      getEvent.mockResolvedValue({ ...baseEvent, mode: 'online', viewerStatus: 'joined' })
+      renderAt()
+
+      await screen.findByRole('button', { name: 'Chat' })
+      expect(screen.queryByRole('link', { name: /get directions/i })).not.toBeInTheDocument()
+    })
+  })
+
   it('the host sees Cancel event instead of Join, and it deletes then navigates back to Events', async () => {
     vi.spyOn(window, 'confirm').mockReturnValue(true)
     getEvent.mockResolvedValue({ ...baseEvent, hostId: 'guest-1', viewerStatus: 'host' })
@@ -135,7 +187,7 @@ describe('EventDetailPage', () => {
 
     it("fetches and shows each pending requester, with Approve/Deny — the gap this closes: there was previously no way for a host to act on a request at all", async () => {
       getEvent.mockResolvedValue(hostEvent)
-      getJoinRequests.mockResolvedValue({ items: [{ uid: 'req-1', displayName: 'Rohan' }] })
+      getJoinRequests.mockResolvedValue({ requested: [{ uid: 'req-1', displayName: 'Rohan' }], approved: [], denied: [] })
       renderAt()
 
       await waitFor(() => expect(getJoinRequests).toHaveBeenCalledWith('evt-1'))
@@ -162,16 +214,16 @@ describe('EventDetailPage', () => {
 
     it('shows no join-requests section when there are none pending', async () => {
       getEvent.mockResolvedValue(hostEvent)
-      getJoinRequests.mockResolvedValue({ items: [] })
+      getJoinRequests.mockResolvedValue({ requested: [], approved: [], denied: [] })
       renderAt()
 
       await waitFor(() => expect(getJoinRequests).toHaveBeenCalled())
       expect(screen.queryByText(/join request/i)).not.toBeInTheDocument()
     })
 
-    it('clicking Approve calls approveJoinRequest and removes that requester from the list', async () => {
+    it('clicking Approve calls approveJoinRequest, moving that requester into the Approved list', async () => {
       getEvent.mockResolvedValue(hostEvent)
-      getJoinRequests.mockResolvedValue({ items: [{ uid: 'req-1', displayName: 'Rohan' }] })
+      getJoinRequests.mockResolvedValue({ requested: [{ uid: 'req-1', displayName: 'Rohan' }], approved: [], denied: [] })
       approveJoinRequest.mockResolvedValue(undefined)
       renderAt()
 
@@ -179,12 +231,14 @@ describe('EventDetailPage', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Approve' }))
 
       await waitFor(() => expect(approveJoinRequest).toHaveBeenCalledWith('evt-1', 'req-1'))
-      await waitFor(() => expect(screen.queryByText('Rohan')).not.toBeInTheDocument())
+      await waitFor(() => expect(screen.queryByRole('button', { name: 'Approve' })).not.toBeInTheDocument())
+      // still visible — just moved out of the pending section, into Approved
+      expect(screen.getByText('Rohan')).toBeInTheDocument()
     })
 
-    it('clicking Deny calls denyJoinRequest and removes that requester from the list', async () => {
+    it('clicking Deny calls denyJoinRequest, moving that requester into the Denied list', async () => {
       getEvent.mockResolvedValue(hostEvent)
-      getJoinRequests.mockResolvedValue({ items: [{ uid: 'req-1', displayName: 'Rohan' }] })
+      getJoinRequests.mockResolvedValue({ requested: [{ uid: 'req-1', displayName: 'Rohan' }], approved: [], denied: [] })
       denyJoinRequest.mockResolvedValue(undefined)
       renderAt()
 
@@ -192,12 +246,14 @@ describe('EventDetailPage', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Deny' }))
 
       await waitFor(() => expect(denyJoinRequest).toHaveBeenCalledWith('evt-1', 'req-1'))
-      await waitFor(() => expect(screen.queryByText('Rohan')).not.toBeInTheDocument())
+      await waitFor(() => expect(screen.queryByRole('button', { name: 'Deny' })).not.toBeInTheDocument())
+      // still visible — just moved out of the pending section, into Denied
+      expect(screen.getByText('Rohan')).toBeInTheDocument()
     })
 
     it('shows an error and leaves the request in the list when approving fails', async () => {
       getEvent.mockResolvedValue(hostEvent)
-      getJoinRequests.mockResolvedValue({ items: [{ uid: 'req-1', displayName: 'Rohan' }] })
+      getJoinRequests.mockResolvedValue({ requested: [{ uid: 'req-1', displayName: 'Rohan' }], approved: [], denied: [] })
       approveJoinRequest.mockRejectedValue(new Error('This event is at capacity'))
       renderAt()
 
@@ -206,6 +262,24 @@ describe('EventDetailPage', () => {
 
       expect(await screen.findByRole('alert')).toHaveTextContent('This event is at capacity')
       expect(screen.getByText('Rohan')).toBeInTheDocument()
+    })
+
+    it("shows who's already been approved, read-only (no Approve/Deny — they're already in)", async () => {
+      getEvent.mockResolvedValue(hostEvent)
+      getJoinRequests.mockResolvedValue({ requested: [], approved: [{ uid: 'p-1', displayName: 'Priya' }], denied: [] })
+      renderAt()
+
+      expect(await screen.findByText('Priya')).toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: 'Approve' })).not.toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: 'Deny' })).not.toBeInTheDocument()
+    })
+
+    it('shows who has been denied, so the host has a record of past decisions', async () => {
+      getEvent.mockResolvedValue(hostEvent)
+      getJoinRequests.mockResolvedValue({ requested: [], approved: [], denied: [{ uid: 'd-1', displayName: 'Vikram' }] })
+      renderAt()
+
+      expect(await screen.findByText('Vikram')).toBeInTheDocument()
     })
   })
 })

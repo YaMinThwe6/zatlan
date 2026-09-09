@@ -66,3 +66,10 @@ export async function deleteEvent(req: Request, res: Response): Promise<void> {
   await eventsService.deleteEvent(req.uid!, req.params.eventId);
   Responder.noContent(res);
 }
+
+// Scheduler-only — see requireCronSecret (middleware/auth.ts). No req.uid;
+// this runs on behalf of no one in particular.
+export async function postEventReminders(_req: Request, res: Response): Promise<void> {
+  await eventsService.sendEventReminders();
+  Responder.noContent(res);
+}

@@ -2,6 +2,11 @@ import type { Request, Response } from "express";
 import { Responder } from "../utils/responder.js";
 import * as roomsService from "../services/rooms.service.js";
 
+export async function getRoom(req: Request, res: Response): Promise<void> {
+  const result = await roomsService.getRoomDetail(req.uid!, req.params.roomId);
+  Responder.success(res, result);
+}
+
 export async function postMessage(req: Request, res: Response): Promise<void> {
   const result = await roomsService.sendMessage(req.uid!, req.params.roomId, req.body?.text);
   Responder.success(res, result, "OK", 201);

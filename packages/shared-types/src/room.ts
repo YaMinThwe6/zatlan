@@ -20,3 +20,19 @@ export interface Room {
   memberIds: string[]
   createdAt: string | null
 }
+
+// GET /rooms/:roomId — member-only. Messages themselves only ever carry a
+// bare authorId (reads bypass the backend, straight from Firestore), so this
+// is what resolves the room back to its event's title and its members'
+// display names for RoomChat.tsx's own header and message-author labels.
+export interface RoomMember {
+  uid: string
+  displayName: string
+}
+
+export interface RoomDetail {
+  roomId: string
+  type: 'ephemeral' | 'persistent'
+  eventTitle: string
+  members: RoomMember[]
+}

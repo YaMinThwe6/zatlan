@@ -11,3 +11,8 @@ export async function patchNotification(req: Request, res: Response): Promise<vo
   await notificationsService.markNotificationRead(req.uid!, req.params.notificationId, req.body?.read);
   Responder.noContent(res);
 }
+
+export async function postClearNotifications(req: Request, res: Response): Promise<void> {
+  await notificationsService.clearAllNotifications(req.uid!);
+  Responder.noContent(res);
+}

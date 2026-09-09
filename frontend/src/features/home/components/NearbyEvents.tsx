@@ -117,17 +117,22 @@ export function NearbyEvents() {
                   <div className="mt-0.5 text-[10.5px] text-text-muted">{event.distanceKm} km away</div>
                 </div>
                 <div className="flex flex-none flex-col items-end gap-1.5">
-                  <button
-                    type="button"
-                    disabled={!!joined}
-                    onClick={() => handleJoin(event.eventId)}
-                    className="rounded-[9px] bg-accent px-4 py-2 text-[12px] font-bold text-bg disabled:opacity-60"
-                  >
-                    {joined === 'joined' ? 'Joined' : joined === 'pending' ? 'Requested' : 'Join'}
-                  </button>
-                  {joined === 'joined' && (
-                    <button type="button" onClick={() => navigate(`/rooms/${event.roomId}`)} className="text-[11px] font-semibold text-text-muted">
+                  {joined === 'joined' ? (
+                    <button
+                      type="button"
+                      onClick={() => navigate(`/rooms/${event.roomId}`)}
+                      className="rounded-[9px] bg-accent px-4 py-2 text-[12px] font-bold text-bg"
+                    >
                       Chat
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      disabled={joined === 'pending'}
+                      onClick={() => handleJoin(event.eventId)}
+                      className="rounded-[9px] bg-accent px-4 py-2 text-[12px] font-bold text-bg disabled:opacity-60"
+                    >
+                      {joined === 'pending' ? 'Requested' : 'Join'}
                     </button>
                   )}
                 </div>

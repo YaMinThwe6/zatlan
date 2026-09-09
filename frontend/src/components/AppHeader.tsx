@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { getMe, type Me } from '../lib/api'
-import { getNotifications } from '../features/home/services/homeApi'
+import { NotificationBell } from './NotificationBell'
 
 interface Props {
   onSignOut: () => void
@@ -25,7 +25,6 @@ interface Props {
 export function AppHeader({ onSignOut, me: meProp }: Props) {
   const navigate = useNavigate()
   const [fetchedMe, setFetchedMe] = useState<Me | null>(null)
-  const [unreadCount, setUnreadCount] = useState(0)
 
   useEffect(() => {
     if (meProp) return // caller already supplies a live `me` — nothing to fetch
@@ -42,20 +41,6 @@ export function AppHeader({ onSignOut, me: meProp }: Props) {
     // change of its value, which would just refetch pointlessly.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [!meProp])
-
-  useEffect(() => {
-    let cancelled = false
-    getNotifications(true)
-      .then((res) => {
-        if (!cancelled) setUnreadCount(res.items.length)
-      })
-      .catch(() => {
-        if (!cancelled) setUnreadCount(0)
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [])
 
   const me = meProp ?? fetchedMe
   if (!me) return null // avoid a flash of an empty avatar/name before this resolves
@@ -77,21 +62,7 @@ export function AppHeader({ onSignOut, me: meProp }: Props) {
       </button>
 
       <div className="flex items-center gap-3.5 pl-4">
-        <button
-          type="button"
-          aria-label={`${unreadCount} unread notifications`}
-          className="relative flex h-9 w-9 items-center justify-center rounded-[10px] border border-border-soft bg-surface-alt"
-        >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-text-secondary" aria-hidden="true">
-            <path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" />
-            <path d="M13.7 21a2 2 0 0 1-3.4 0" />
-          </svg>
-          {unreadCount > 0 && (
-            <span className="absolute -top-1 -right-1 flex h-4.5 min-w-4.5 items-center justify-center rounded-full bg-accent px-1 text-[9.5px] font-bold text-bg">
-              {unreadCount > 9 ? '9+' : unreadCount}
-            </span>
-          )}
-        </button>
+        <NotificationBell />
         {/* Replaces Sidebar's old "Profile" nav row — the avatar/name here
             already showed who's signed in, so this is the entry point to
             their own profile now instead of a separate nav item. */}

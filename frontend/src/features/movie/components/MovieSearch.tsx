@@ -11,6 +11,7 @@ import {
 import { posterUrl } from '../../../lib/images'
 import { useAuth } from '../../../lib/AuthContext'
 import { Sidebar } from '../../../components/Sidebar'
+import { AppHeader } from '../../../components/AppHeader'
 import { MobileTabBar } from '../../../components/MobileTabBar'
 import { matchFacet, type FacetMatch } from '../genreLanguageMatch'
 import { DiscoverPeopleTeaser } from './DiscoverPeopleTeaser'
@@ -93,7 +94,7 @@ function PosterSkeletonGrid({ count = 10 }: { count?: number }) {
 // the "Browse Korean films" facet chip — is shared between the two.
 export function MovieSearch() {
   const navigate = useNavigate()
-  const { user } = useAuth()
+  const { user, signOutUser } = useAuth()
   const isGuest = !user
   const [query, setQuery] = useState('')
   const [results, setResults] = useState<MovieSummary[]>([])
@@ -405,8 +406,9 @@ export function MovieSearch() {
       <Sidebar active="search" />
 
       <main className="min-w-0 flex-1 pb-6 lg:flex lg:flex-col lg:pb-0">
-        <header className="flex items-center gap-3 border-b border-border-soft px-5 py-4 lg:px-7">
-          <button type="button" onClick={() => navigate('/')} className="cursor-pointer text-sm font-semibold text-text-secondary lg:hidden">
+        <AppHeader onSignOut={() => void signOutUser()} />
+        <header className="flex items-center gap-3 border-b border-border-soft px-5 py-4 lg:hidden">
+          <button type="button" onClick={() => navigate('/')} className="cursor-pointer text-sm font-semibold text-text-secondary">
             ← Home
           </button>
           <h1 className="text-[15px] font-bold text-text">Search</h1>

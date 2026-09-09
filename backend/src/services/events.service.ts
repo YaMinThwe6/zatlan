@@ -105,7 +105,10 @@ async function checkJoinStatus(
   const participantSnap = await eventRef.collection("participants").doc(callerUid).get();
   if (participantSnap.exists) return { joined: true, pending: false };
   const requestSnap = await eventRef.collection("joinRequests").doc(callerUid).get();
-  return { joined: false, pending: requestSnap.exists };
+  // A denied request is kept around (deny no longer deletes it, so the host
+  // can still see it was denied) but is no longer "outstanding" — a fresh
+  // join attempt should be offered again, not stuck showing "Requested".
+  return { joined: false, pending: requestSnap.exists && requestSnap.data()?.status !== "denied" };
 }
 
 // Shared by every UpcomingEvent-shaped list below (upcoming/nearby/hosting)
@@ -316,8 +319,12 @@ export async function joinEvent(uid: string, eventId: string): Promise<{ status:
   }
 
   const requestRef = eventRef.collection("joinRequests").doc(uid);
-  if (!(await requestRef.get()).exists) {
-    await requestRef.set({ createdAt: new Date() });
+  const requestSnap = await requestRef.get();
+  // A denied request isn't outstanding — this re-opens it as a fresh pending
+  // request rather than silently no-op'ing (which used to leave the caller
+  // stuck as "denied" forever with no way to ask again).
+  if (!requestSnap.exists || requestSnap.data()?.status === "denied") {
+    await requestRef.set({ createdAt: new Date(), status: "pending" });
     await writeNotification(event.hostId, "eventJoinRequest", uid, "event", eventId);
   }
   return { status: "pending" };
@@ -348,25 +355,47 @@ export async function leaveEvent(uid: string, eventId: string): Promise<void> {
   });
 }
 
-// GET /events/:eventId/joinRequests — host-only (hld.md §7's reused §3 ownership check).
-export async function listJoinRequests(uid: string, eventId: string): Promise<{ items: EventJoinRequest[] }> {
+async function toEventJoinRequestList(db: FirebaseFirestore.Firestore, uids: string[]): Promise<EventJoinRequest[]> {
+  return Promise.all(
+    uids.map(async (requesterUid) => {
+      const userSnap = await db.collection("users").doc(requesterUid).get();
+      return { uid: requesterUid, displayName: userSnap.data()?.displayName ?? "Unknown" };
+    })
+  );
+}
+
+// GET /events/:eventId/joinRequests — host-only (hld.md §7's reused §3
+// ownership check). Splits into the three lists the host's event-detail page
+// needs: who's asked (pending), who's in (approved — i.e. participants,
+// minus the host's own auto-join), and who was turned down (denied —
+// denyJoinRequest keeps the record instead of deleting it, specifically so
+// this list isn't empty).
+export async function listJoinRequests(
+  uid: string,
+  eventId: string
+): Promise<{ requested: EventJoinRequest[]; approved: EventJoinRequest[]; denied: EventJoinRequest[] }> {
   const db = requireDb();
-  const eventSnap = await db.collection("events").doc(eventId).get();
+  const eventRef = db.collection("events").doc(eventId);
+  const eventSnap = await eventRef.get();
   if (!eventSnap.exists) {
     throw new AppError("EVENT_NOT_FOUND", "No such event", 404);
   }
-  if (eventSnap.data()?.hostId !== uid) {
+  const hostId = eventSnap.data()?.hostId;
+  if (hostId !== uid) {
     throw new AppError("FORBIDDEN", "Only the host can view join requests", 403);
   }
 
-  const snap = await db.collection("events").doc(eventId).collection("joinRequests").get();
-  const items = await Promise.all(
-    snap.docs.map(async (d) => {
-      const userSnap = await db.collection("users").doc(d.id).get();
-      return { uid: d.id, displayName: userSnap.data()?.displayName ?? "Unknown" };
-    })
-  );
-  return { items };
+  const [requestsSnap, participantsSnap] = await Promise.all([eventRef.collection("joinRequests").get(), eventRef.collection("participants").get()]);
+  const pendingUids = requestsSnap.docs.filter((d) => d.data()?.status !== "denied").map((d) => d.id);
+  const deniedUids = requestsSnap.docs.filter((d) => d.data()?.status === "denied").map((d) => d.id);
+  const approvedUids = participantsSnap.docs.map((d) => d.id).filter((participantUid) => participantUid !== hostId);
+
+  const [requested, approved, denied] = await Promise.all([
+    toEventJoinRequestList(db, pendingUids),
+    toEventJoinRequestList(db, approvedUids),
+    toEventJoinRequestList(db, deniedUids)
+  ]);
+  return { requested, approved, denied };
 }
 
 export async function approveJoinRequest(uid: string, eventId: string, requesterUid: string): Promise<void> {
@@ -416,7 +445,16 @@ export async function denyJoinRequest(uid: string, eventId: string, requesterUid
   if (eventSnap.data()?.hostId !== uid) {
     throw new AppError("FORBIDDEN", "Only the host can deny join requests", 403);
   }
-  await db.collection("events").doc(eventId).collection("joinRequests").doc(requesterUid).delete();
+  const requestRef = db.collection("events").doc(eventId).collection("joinRequests").doc(requesterUid);
+  if (!(await requestRef.get()).exists) {
+    throw new AppError("REQUEST_NOT_FOUND", "No such join request", 404);
+  }
+  // Marked denied rather than deleted — kept so the host's join-requests
+  // list can still show who was turned down (listJoinRequests's "denied"
+  // bucket), while checkJoinStatus/joinEvent treat it as no longer
+  // outstanding so the requester can ask again.
+  await requestRef.update({ status: "denied", deniedAt: new Date() });
+  await writeNotification(requesterUid, "eventJoinDenied", uid, "event", eventId);
 }
 
 // GET /events/nearby — hld.md §9. Firestore has no native radius query, so
@@ -590,17 +628,17 @@ async function findEventsByCollectionGroup(
   db: FirebaseFirestore.Firestore,
   collectionName: "participants" | "joinRequests",
   callerUid: string
-): Promise<{ id: string; data: FirebaseFirestore.DocumentData }[]> {
+): Promise<{ id: string; data: FirebaseFirestore.DocumentData; subData: FirebaseFirestore.DocumentData }[]> {
   const snap = await db.collectionGroup(collectionName).get();
   const mine = snap.docs.filter((d) => d.id === callerUid);
   const events = await Promise.all(
     mine.map(async (d) => {
       const eventId = d.ref.parent.parent!.id;
       const eventSnap = await db.collection("events").doc(eventId).get();
-      return eventSnap.exists ? { id: eventSnap.id, data: eventSnap.data()! } : null;
+      return eventSnap.exists ? { id: eventSnap.id, data: eventSnap.data()!, subData: d.data() } : null;
     })
   );
-  return events.filter((e): e is { id: string; data: FirebaseFirestore.DocumentData } => e !== null && e.data.deleted !== true);
+  return events.filter((e): e is { id: string; data: FirebaseFirestore.DocumentData; subData: FirebaseFirestore.DocumentData } => e !== null && e.data.deleted !== true);
 }
 
 async function toJoinedEventSummary(
@@ -660,12 +698,76 @@ export async function listJoinedEvents(callerUid: string, rawWhen: unknown): Pro
 // Excludes anything already approved (a joinRequests doc left behind after
 // approval would otherwise double-list it — approveJoinRequest already
 // deletes it, but this stays a real filter rather than trusting that
-// invariant blindly).
+// invariant blindly) and anything denied (denyJoinRequest keeps the doc
+// instead of deleting it, so it must be filtered out here explicitly — a
+// denied request is no longer outstanding).
 export async function listRequestedEvents(callerUid: string): Promise<{ items: UpcomingEvent[] }> {
   const db = requireDb();
   const found = await findEventsByCollectionGroup(db, "joinRequests", callerUid);
-  const items = await Promise.all(found.map(({ id, data }) => toJoinedEventSummary(db, id, data, false, true)));
+  const outstanding = found.filter(({ subData }) => subData.status !== "denied");
+  const items = await Promise.all(outstanding.map(({ id, data }) => toJoinedEventSummary(db, id, data, false, true)));
   return { items };
+}
+
+const REMINDER_24H_WINDOW_MS = 24 * 60 * 60 * 1000;
+const REMINDER_1H_WINDOW_MS = 60 * 60 * 1000;
+
+async function notifyEventReminder(
+  db: FirebaseFirestore.Firestore,
+  eventId: string,
+  hostId: string,
+  window: "24h" | "1h"
+): Promise<void> {
+  const participantsSnap = await db.collection("events").doc(eventId).collection("participants").get();
+  const participantUids = participantsSnap.docs.map((d) => d.id).filter((participantUid) => participantUid !== hostId);
+  await writeNotification(hostId, window === "24h" ? "eventReminderHost24h" : "eventReminderHost1h", null, "event", eventId);
+  await Promise.all(
+    participantUids.map((participantUid) =>
+      writeNotification(participantUid, window === "24h" ? "eventReminderParticipant24h" : "eventReminderParticipant1h", null, "event", eventId)
+    )
+  );
+}
+
+// POST /events/remind — meant to be called periodically by an external
+// scheduler (e.g. Cloud Scheduler hitting this on a ~15-30min cadence, guarded
+// by requireCronSecret rather than a signed-in user), not by the app itself.
+// Window-based rather than exact-time: "due" means within N hours of the
+// event and not yet sent, so it fires correctly once regardless of how often
+// (or irregularly) the scheduler actually runs, rather than needing to land
+// in a precise instant. `now` is injectable for deterministic tests.
+export async function sendEventReminders(now: Date = new Date()): Promise<{ notified24h: number; notified1h: number }> {
+  const db = requireDb();
+  const snap = await db.collection("events").get();
+  const nowMs = now.getTime();
+  let notified24h = 0;
+  let notified1h = 0;
+
+  for (const d of snap.docs) {
+    const data = d.data();
+    if (data.deleted === true) continue;
+    const dt = data.datetime;
+    const millis = dt instanceof Date ? dt.getTime() : dt?.toDate?.().getTime();
+    if (typeof millis !== "number" || millis <= nowMs) continue; // already happened, or no valid datetime
+
+    const hostId = data.hostId as string;
+    const patch: Record<string, Date> = {};
+
+    if (millis - nowMs <= REMINDER_24H_WINDOW_MS && !data.reminder24hSentAt) {
+      await notifyEventReminder(db, d.id, hostId, "24h");
+      patch.reminder24hSentAt = now;
+      notified24h++;
+    }
+    if (millis - nowMs <= REMINDER_1H_WINDOW_MS && !data.reminder1hSentAt) {
+      await notifyEventReminder(db, d.id, hostId, "1h");
+      patch.reminder1hSentAt = now;
+      notified1h++;
+    }
+    if (Object.keys(patch).length > 0) {
+      await db.collection("events").doc(d.id).update(patch);
+    }
+  }
+
+  return { notified24h, notified1h };
 }
 
 // DELETE /events/:eventId — hld.md §21's general edit/delete pattern: author

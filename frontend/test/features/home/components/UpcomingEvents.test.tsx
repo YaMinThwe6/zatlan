@@ -48,7 +48,7 @@ describe('UpcomingEvents', () => {
     await waitFor(() => expect(screen.getByText(/no public events/i)).toBeInTheDocument())
   })
 
-  it('renders an event and joins it on click', async () => {
+  it('renders an event and joins it on click, the button itself becoming Chat', async () => {
     getUpcomingEvents.mockResolvedValue({ items: [event] })
     joinEvent.mockResolvedValue({ status: 'joined' })
     renderWithRouter()
@@ -57,7 +57,10 @@ describe('UpcomingEvents', () => {
     fireEvent.click(screen.getByRole('button', { name: /join/i }))
 
     await waitFor(() => expect(joinEvent).toHaveBeenCalledWith('evt-1'))
-    expect(await screen.findByRole('button', { name: 'Joined' })).toBeDisabled()
+    // Chat, not a disabled "Joined" — you're in, so the button takes you
+    // straight to the room instead of just sitting there inert.
+    expect(await screen.findByRole('button', { name: /^chat$/i })).not.toBeDisabled()
+    expect(screen.queryByRole('button', { name: 'Joined' })).not.toBeInTheDocument()
   })
 
   it('shows Requested when the event requires approval', async () => {
@@ -80,11 +83,12 @@ describe('UpcomingEvents', () => {
     expect(await screen.findByText('Bandra West, Mumbai')).toBeInTheDocument()
   })
 
-  it('shows Joined immediately on load for an event the backend already reports as joined — real bug: this used to reset to "Join" on every page refresh', async () => {
+  it('shows Chat immediately on load for an event the backend already reports as joined — real bug: this used to reset to "Join" on every page refresh', async () => {
     getUpcomingEvents.mockResolvedValue({ items: [{ ...event, joined: true }] })
     renderWithRouter()
 
-    expect(await screen.findByRole('button', { name: 'Joined' })).toBeDisabled()
+    expect(await screen.findByRole('button', { name: /^chat$/i })).not.toBeDisabled()
+    expect(screen.queryByRole('button', { name: 'Joined' })).not.toBeInTheDocument()
     expect(joinEvent).not.toHaveBeenCalled()
   })
 
@@ -96,7 +100,7 @@ describe('UpcomingEvents', () => {
     expect(joinEvent).not.toHaveBeenCalled()
   })
 
-  it('offers a Chat button once joined, opening the event\'s room', async () => {
+  it('the Join button becomes Chat once joined, opening the event\'s room', async () => {
     getUpcomingEvents.mockResolvedValue({ items: [event] })
     joinEvent.mockResolvedValue({ status: 'joined' })
     renderWithRouter()
@@ -105,7 +109,8 @@ describe('UpcomingEvents', () => {
     expect(screen.queryByRole('button', { name: /^chat$/i })).not.toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: /join/i }))
-    fireEvent.click(await screen.findByRole('button', { name: /^chat$/i }))
+    expect(await screen.findAllByRole('button', { name: /^chat$/i })).toHaveLength(1) // one button, not Joined+Chat side by side
+    fireEvent.click(screen.getByRole('button', { name: /^chat$/i }))
 
     expect(await screen.findByText('Room chat page')).toBeInTheDocument()
   })
