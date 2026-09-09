@@ -179,6 +179,35 @@ describe("GET /recommendations", () => {
     expect(res.body.data.items.map((m: { movieId: string }) => m.movieId)).toEqual(["ta-movie"]);
   });
 
+  // Real reported bug: a movie could rank #1 in "Top picks for you" with a
+  // mediocre matchScore (e.g. 40%) because the candidate pool is queried
+  // ordered by voteAverage, and the final list was just that query's order
+  // sliced to RESULT_LIMIT — matchScore was computed for the badge but never
+  // fed back into ranking. A high-rated, barely-matching movie could outrank
+  // a lower-rated, well-matching one.
+  it("ranks by matchScore, not by the movie's own rating — a better genre match beats a higher-rated weaker match", async () => {
+    store.set("movies/high-rating-weak-match", { title: "High Rating Weak Match", genres: ["Sci-Fi"], voteAverage: 9.5 }); // 1/2 genres -> ~64%
+    store.set("movies/lower-rating-strong-match", {
+      title: "Lower Rating Strong Match",
+      genres: ["Sci-Fi", "Drama"],
+      voteAverage: 7.0
+    }); // 2/2 genres -> ~91%
+    store.set("users/uid-1", { favoriteGenres: ["Sci-Fi", "Drama"] });
+
+    const app = createApp();
+    const res = await req(app);
+
+    const ids = res.body.data.items.map((m: { movieId: string }) => m.movieId);
+    const highRatingIndex = ids.indexOf("high-rating-weak-match");
+    const strongMatchIndex = ids.indexOf("lower-rating-strong-match");
+    expect(strongMatchIndex).toBeGreaterThanOrEqual(0);
+    expect(highRatingIndex).toBeGreaterThanOrEqual(0);
+    expect(strongMatchIndex).toBeLessThan(highRatingIndex); // the better match comes first despite the lower rating
+
+    const byId = new Map(res.body.data.items.map((m: { movieId: string; matchScore: number }) => [m.movieId, m.matchScore]));
+    expect(byId.get("lower-rating-strong-match")).toBeGreaterThan(byId.get("high-rating-weak-match") as number);
+  });
+
   it("excludes movies already watched or watchlisted", async () => {
     store.set("users/uid-1", { favoriteGenres: null });
     store.set("users/uid-1/watched/interstellar", { watchedAt: new Date(), visibility: "public" });
