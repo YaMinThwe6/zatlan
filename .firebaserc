@@ -1,5 +1,18 @@
 {
   "projects": {
     "default": "binj-app"
-  }
+  },
+  "targets": {
+    "binj-app": {
+      "hosting": {
+        "zatlan": [
+          "zatlan"
+        ],
+        "legacy": [
+          "binj-app"
+        ]
+      }
+    }
+  },
+  "etags": {}
 }

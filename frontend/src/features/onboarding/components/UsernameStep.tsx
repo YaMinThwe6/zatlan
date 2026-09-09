@@ -117,7 +117,7 @@ export function UsernameStep({ initialDisplayName, initialUsername, email, onDon
     >
       <form onSubmit={handleSubmit} className="flex flex-1 flex-col px-7 pt-8 pb-10">
         <h1 className="font-serif text-[26px] font-semibold text-white">Create your profile</h1>
-        <p className="mt-2 mb-7 text-[13.5px] text-text-muted">This is how people on BINJ will find and recognize you.</p>
+        <p className="mt-2 mb-7 text-[13.5px] text-text-muted">This is how people on ZATLAN will find and recognize you.</p>
 
         {/* Implicit label association (no id/htmlFor) — this step's own
             outer wrapper renders twice at once (a mobile copy and a desktop

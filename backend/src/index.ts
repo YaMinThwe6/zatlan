@@ -6,5 +6,5 @@ const app = createApp();
 const port = Number(env.PORT);
 
 app.listen(port, () => {
-  logger.info(`BINJ backend listening on http://localhost:${port}`);
+  logger.info(`ZATLAN backend listening on http://localhost:${port}`);
 });

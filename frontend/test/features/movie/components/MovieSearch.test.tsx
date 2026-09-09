@@ -175,10 +175,10 @@ describe('MovieSearch — browse by genre / language chip', () => {
 })
 
 describe('MovieSearch — guest usage (public Discover)', () => {
-  it('shows the BINJ brand and a Get Started button instead of a back button', () => {
+  it('shows the ZATLAN brand and a Get Started button instead of a back button', () => {
     authUser = null
     renderWithRouter('/')
-    expect(screen.getByText('BINJ')).toBeInTheDocument()
+    expect(screen.getByText('ZATLAN')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /^get started$/i })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /← home/i })).not.toBeInTheDocument()
   })

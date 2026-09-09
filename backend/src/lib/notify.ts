@@ -1,4 +1,4 @@
-import type { NotificationType } from "@binj/shared-types";
+import type { NotificationType } from "@zatlan/shared-types";
 import { db } from "./firebaseAdmin.js";
 
 export type { NotificationType };

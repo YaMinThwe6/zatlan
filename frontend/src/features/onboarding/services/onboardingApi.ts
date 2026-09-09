@@ -1,6 +1,6 @@
 import { apiFetch } from '../../../lib/api'
-export type { MovieCandidate, CelebritySuggestion, PersonSummary } from '@binj/shared-types'
-import type { MovieCandidate, CelebritySuggestion, PersonSummary } from '@binj/shared-types'
+export type { MovieCandidate, CelebritySuggestion, PersonSummary } from '@zatlan/shared-types'
+import type { MovieCandidate, CelebritySuggestion, PersonSummary } from '@zatlan/shared-types'
 
 export function checkUsernameAvailable(username: string): Promise<{ available: boolean }> {
   return apiFetch(`/users/username-available?username=${encodeURIComponent(username)}`, { auth: true })
@@ -36,7 +36,7 @@ export function getCelebritySuggestions(
   return apiFetch(`/onboarding/celebrity-suggestions${qs ? `?${qs}` : ''}`, { auth: true })
 }
 
-// Local-only, like the suggestions above — only ever finds someone BINJ has
+// Local-only, like the suggestions above — only ever finds someone ZATLAN has
 // already ingested via some movie's credits (people.service.ts's
 // searchPeopleService), not the entire universe of actors.
 export function searchPeople(query: string): Promise<{ items: PersonSummary[] }> {

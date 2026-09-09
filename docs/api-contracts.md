@@ -1,4 +1,4 @@
-# BINJ — API Contracts
+# ZATLAN — API Contracts
 
 Endpoint-level request/response shapes for every flow in [hld.md](hld.md), built on top of [data-model.md](data-model.md) and [schema.md](schema.md). Last stage of the HLD → conceptual model → concrete schema → API contracts sequence.
 
@@ -10,7 +10,7 @@ Endpoint-level request/response shapes for every flow in [hld.md](hld.md), built
 - **Errors:** a single envelope everywhere — `{ "error": { "code": string, "message": string } }` with a matching HTTP status (400 validation, 401 no/bad token, 403 authenticated but not permitted, 404 not found, 409 conflict). Not repeated per endpoint below.
 - **Pagination:** cursor-based (`?cursor=<opaque>&limit=<n>`), matching Firestore's own `startAfter` model rather than offset-based paging — response includes `nextCursor: string | null`.
 - **Timestamps:** ISO 8601 strings over the wire; stored as Firestore `timestamp` per schema.md.
-- **Types:** every response shape documented below has a matching TypeScript interface in `packages/shared-types` (`@binj/shared-types`, a pnpm workspace package) — both `backend/src/routes/*.ts` and `frontend/src/lib/api.ts` import from it rather than declaring their own copies, so the two sides can't silently drift apart.
+- **Types:** every response shape documented below has a matching TypeScript interface in `packages/shared-types` (`@zatlan/shared-types`, a pnpm workspace package) — both `backend/src/routes/*.ts` and `frontend/src/lib/api.ts` import from it rather than declaring their own copies, so the two sides can't silently drift apart.
 
 ---
 
@@ -19,12 +19,12 @@ Endpoint-level request/response shapes for every flow in [hld.md](hld.md), built
 ```
 GET /movies/:movieId
 → 200 { movieId, title, year, runtime, genres[], synopsis, poster, cast[], crew[],
-        voteAverage, voteCount, trailerKey, binjRating: {sum, count}, likeCount,
+        voteAverage, voteCount, trailerKey, zatlanRating: {sum, count}, likeCount,
         streamingProviders[], isAdult }
 ```
 Triggers the cache → Firestore → TMDB fallback chain server-side (§2); streaming providers refresh on their own TTL (§8) but are returned as part of the same response, not a separate call.
 
-**Implementation note (added once this was actually built):** `binjRating`/`likeCount` are normalized in the response to `{sum:0,count:0}`/`0` when absent from storage (a movie nobody's rated or liked yet has no reason to have those fields actually written) — the client never has to special-case "missing" vs. "zero". `isAdult` from the original sketch above isn't currently returned (it's fetched from TMDB and stored, just not surfaced in the response yet — no feature depends on it client-side).
+**Implementation note (added once this was actually built):** `zatlanRating`/`likeCount` are normalized in the response to `{sum:0,count:0}`/`0` when absent from storage (a movie nobody's rated or liked yet has no reason to have those fields actually written) — the client never has to special-case "missing" vs. "zero". `isAdult` from the original sketch above isn't currently returned (it's fetched from TMDB and stored, just not surfaced in the response yet — no feature depends on it client-side).
 
 ```
 GET /movies/recent   → 200 { items: [{ movieId, title, poster, year }] }
@@ -37,7 +37,7 @@ GET /discover/movies?genre=:name&language=:code&page=:n
 ```
 Browse-by-facet listing (added for the Search page's "Browse Korean films" / "Browse Horror movies" chip) — distinct from `GET /search/movies` in §7, which is text-relevance ranked; this is "every movie in this genre and/or original language, popularity-ordered." At least one of `genre` (a TMDB genre name, e.g. `Horror`) or `language` (ISO 639-1, e.g. `ko`) is required — 400 `MISSING_FILTER` if neither is a recognized value. `page` is 1-based and passed straight through to TMDB's own `/discover/movie` paging (`totalPages` bounds the frontend's "load more"; both capped at TMDB's page-500 limit). Unauthenticated, same as search. Every page's results are upserted into the local search index (`titleSearchTerms`) so a tapped card opens from Firestore rather than a cold TMDB fetch. 502 `TMDB_UPSTREAM_ERROR` on upstream failure.
 
-**Implementation note (caching, added once this was actually built):** reads `discover/recentMovies` (schema.md §1) instead of hitting TMDB live on every request — refreshed periodically by `backend/scripts/refreshRecentMovies.ts` (`pnpm --filter binj-backend run refresh-recent-movies`), run manually for now rather than on a real Cloud Scheduler trigger, same shortcut hld.md §5b already uses for taste matches. Falls back to a live TMDB call when the cache doc doesn't exist yet (before the script has ever run) or Firestore isn't configured, so the endpoint still works either way. The same script also indexes each recent title for §7's search (`titleSearchTerms`), so a just-released movie is searchable immediately, not only listed here.
+**Implementation note (caching, added once this was actually built):** reads `discover/recentMovies` (schema.md §1) instead of hitting TMDB live on every request — refreshed periodically by `backend/scripts/refreshRecentMovies.ts` (`pnpm --filter zatlan-backend run refresh-recent-movies`), run manually for now rather than on a real Cloud Scheduler trigger, same shortcut hld.md §5b already uses for taste matches. Falls back to a live TMDB call when the cache doc doesn't exist yet (before the script has ever run) or Firestore isn't configured, so the endpoint still works either way. The same script also indexes each recent title for §7's search (`titleSearchTerms`), so a just-released movie is searchable immediately, not only listed here.
 
 ## 2. Watchlist & Watched (§3, §5a) 🔒
 

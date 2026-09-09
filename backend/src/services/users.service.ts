@@ -1,4 +1,4 @@
-import type { UserProfile, PublicProfile, ProfileGenreStat, ActivityItem, ProfileReviewEntry } from "@binj/shared-types";
+import type { UserProfile, PublicProfile, ProfileGenreStat, ActivityItem, ProfileReviewEntry } from "@zatlan/shared-types";
 import { requireDb } from "../lib/firebaseAdmin.js";
 import { AppError } from "../utils/AppError.js";
 
@@ -34,7 +34,7 @@ interface Claims {
   picture?: string;
 }
 
-// Return type is the shared UserProfile DTO (@binj/shared-types) — the wire
+// Return type is the shared UserProfile DTO (@zatlan/shared-types) — the wire
 // contract both frontend and backend agree on, distinct from UserDoc above
 // (internal storage shape, Firestore Timestamps included) by construction.
 function toResponse(doc: UserDoc, isNewUser = false): UserProfile {

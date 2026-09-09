@@ -114,7 +114,7 @@ describe('App search flow', () => {
             voteCount: 1000,
             trailerKey: null,
             streamingProviders: [],
-            binjRating: { sum: 0, count: 0 },
+            zatlanRating: { sum: 0, count: 0 },
             likeCount: 0,
           }),
         })
@@ -171,7 +171,7 @@ describe('App — signed-out root ("/")', () => {
 
     expect(await screen.findByText(/discover movies/i)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /^get started$/i })).toBeInTheDocument()
-    expect(screen.queryByText(/find your movie/i)).not.toBeInTheDocument() // Welcome splash, not shown yet
+    expect(screen.queryByText(/stories are better together/i)).not.toBeInTheDocument() // Welcome splash, not shown yet
   })
 
   it('opens Welcome when Get Started is clicked, and Back returns to Discover', async () => {
@@ -184,7 +184,7 @@ describe('App — signed-out root ("/")', () => {
     // Mobile and desktop each render their own copy of the tagline/back
     // button, toggled by CSS breakpoint — both exist in jsdom regardless of
     // viewport since it doesn't evaluate media queries.
-    await waitFor(() => expect(screen.getAllByText(/find your movie/i).length).toBeGreaterThan(0))
+    await waitFor(() => expect(screen.getAllByText(/stories are better together/i).length).toBeGreaterThan(0))
 
     fireEvent.click(screen.getAllByRole('button', { name: /back to discover/i })[0])
     expect(await screen.findByText(/discover movies/i)).toBeInTheDocument()

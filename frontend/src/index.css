@@ -1,6 +1,6 @@
 @import "tailwindcss";
 
-/* BINJ design tokens — from the design canvas (Home/Login/Profile/Signup
+/* ZATLAN design tokens — from the design canvas (Home/Login/Profile/Signup
    mockups), not invented here. Six user-selectable accents (PRD §8),
    emerald default; --accent/--accent-rgb are plain CSS vars (not static
    Tailwind theme colors) because the active one is chosen per-user at

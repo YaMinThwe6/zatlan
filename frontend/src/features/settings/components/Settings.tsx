@@ -227,7 +227,7 @@ export function Settings({ me, onUpdateMe }: Props) {
           copy, so getByLabelText et al still resolve to a single node. */}
       <section id="settings-profile">
         <h2 className="mb-1 text-[15px] font-bold text-text">Profile</h2>
-        <p className="mb-4 text-[11.5px] text-text-muted">This is how you appear across BINJ.</p>
+        <p className="mb-4 text-[11.5px] text-text-muted">This is how you appear across ZATLAN.</p>
         <form
           onSubmit={handleSaveProfile}
           className="overflow-hidden rounded-2xl border border-border-soft bg-surface lg:flex lg:gap-4 lg:overflow-visible lg:rounded-none lg:border-0 lg:bg-transparent"
@@ -296,7 +296,7 @@ export function Settings({ me, onUpdateMe }: Props) {
       {/* APPEARANCE */}
       <section id="settings-appearance">
         <h2 className="mb-1 text-[15px] font-bold text-text">Appearance</h2>
-        <p className="mb-4 text-[11.5px] text-text-muted">Accent colour tints highlights, buttons and links across BINJ.</p>
+        <p className="mb-4 text-[11.5px] text-text-muted">Accent colour tints highlights, buttons and links across ZATLAN.</p>
         {/* Card-wrapped on mobile, matching Privacy/Notifications below (and
             Settings.dc.html's own Appearance card) — flattens on desktop,
             matching SettingsDesktop.dc.html's bare swatch row. */}
@@ -358,7 +358,7 @@ export function Settings({ me, onUpdateMe }: Props) {
                   getTasteMatches. Spelled out explicitly now so the two
                   aren't conflated again. */}
               <p className="mt-0.5 text-[11px] text-text-muted">
-                People browsing BINJ without an account won't see you in "People you might vibe with." Signed-in users can still find you
+                People browsing ZATLAN without an account won't see you in "People you might vibe with." Signed-in users can still find you
                 through People Discovery.
               </p>
             </div>
@@ -376,7 +376,7 @@ export function Settings({ me, onUpdateMe }: Props) {
       {/* NOTIFICATIONS */}
       <section id="settings-notifications">
         <h2 className="mb-1 text-[15px] font-bold text-text">Notifications</h2>
-        <p className="mb-4 text-[11.5px] text-text-muted">BINJ always shows in-app notifications. Email is optional.</p>
+        <p className="mb-4 text-[11.5px] text-text-muted">ZATLAN always shows in-app notifications. Email is optional.</p>
         <div className="overflow-hidden rounded-2xl border border-border-soft bg-surface">
           <div className="flex items-center gap-3.5 px-4.5 py-4">
             <div className="flex-1">
@@ -387,7 +387,7 @@ export function Settings({ me, onUpdateMe }: Props) {
               <p className="mt-0.5 text-[11px] text-text-muted">Event reminders, new followers and room replies.</p>
             </div>
             {/* Real gap: notificationPrefs.emailEnabled was just a stored
-                preference flag nothing ever read — the only place BINJ
+                preference flag nothing ever read — the only place ZATLAN
                 actually sends email is auth.service.ts's OTP/verification
                 mail, unrelated to activity notifications. Disabled until
                 there's an actual email-sending path for these — shown as

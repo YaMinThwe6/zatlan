@@ -364,7 +364,7 @@ export function MovieSearch() {
     return (
       <main className="flex min-h-svh flex-1 flex-col bg-bg text-text">
         <header className="flex items-center justify-between border-b border-border-soft px-5 py-4">
-          <span className="font-serif text-lg font-bold text-accent">BINJ</span>
+          <span className="font-serif text-lg font-bold text-accent">ZATLAN</span>
           <div className="flex items-center gap-4">
             <button type="button" onClick={() => navigate('/story')} className="cursor-pointer text-[13px] font-semibold text-text-secondary">
               Our Story
@@ -379,7 +379,7 @@ export function MovieSearch() {
           <div className="mx-auto w-full max-w-3xl flex-1 px-5 py-6">
             <div className="mb-6">
               <h1 className="font-serif text-[26px] font-semibold text-white">Discover movies</h1>
-              <p className="mt-1 text-[13.5px] text-text-muted">Search, browse, and see what BINJ's community thinks — sign in to rate, save, and connect.</p>
+              <p className="mt-1 text-[13.5px] text-text-muted">Search, browse, and see what ZATLAN's community thinks — sign in to rate, save, and connect.</p>
             </div>
             {searchPanel}
           </div>

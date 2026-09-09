@@ -75,7 +75,7 @@ const movie = {
   voteCount: 4200,
   trailerKey: null,
   streamingProviders: [{ name: 'Netflix', type: 'subscription' as const, logo: '' }],
-  binjRating: { sum: 0, count: 0 },
+  zatlanRating: { sum: 0, count: 0 },
   likeCount: 0
 }
 
@@ -124,7 +124,7 @@ function renderWithRouter(movieId = 'movie-1') {
 }
 
 describe('MovieDetail', () => {
-  it('renders hero info: title, year, genres, runtime, TMDB rating, and "No ratings yet" when binjRating.count is 0', async () => {
+  it('renders hero info: title, year, genres, runtime, TMDB rating, and "No ratings yet" when zatlanRating.count is 0', async () => {
     mockDefaults()
     renderWithRouter()
 
@@ -136,8 +136,8 @@ describe('MovieDetail', () => {
     expect(screen.getByText(/no ratings yet/i)).toBeInTheDocument()
   })
 
-  it('shows the BINJ average when binjRating.count > 0', async () => {
-    getMovie.mockResolvedValue({ ...movie, binjRating: { sum: 18, count: 4 } }) // avg 4.5
+  it('shows the ZATLAN average when zatlanRating.count > 0', async () => {
+    getMovie.mockResolvedValue({ ...movie, zatlanRating: { sum: 18, count: 4 } }) // avg 4.5
     getMovieStatus.mockResolvedValue(emptyStatus)
     getMovieReviews.mockResolvedValue({ items: [], nextCursor: null })
     renderWithRouter()
@@ -329,10 +329,10 @@ describe('MovieDetail', () => {
     await waitFor(() => expect(getMovieReviews).toHaveBeenCalledTimes(2)) // initial load + refresh after submit
   })
 
-  it('refreshes the movie itself after submitting, so a newly-changed BINJ average shows without a reload', async () => {
+  it('refreshes the movie itself after submitting, so a newly-changed ZATLAN average shows without a reload', async () => {
     mockDefaults()
     submitReview.mockResolvedValue({ rating: 5, reviewText: 'Amazing', isAnonymous: false, createdAt: '', updatedAt: '' })
-    getMovie.mockResolvedValueOnce(movie).mockResolvedValueOnce({ ...movie, binjRating: { sum: 5, count: 1 } })
+    getMovie.mockResolvedValueOnce(movie).mockResolvedValueOnce({ ...movie, zatlanRating: { sum: 5, count: 1 } })
     renderWithRouter()
 
     await waitFor(() => expect(screen.getByRole('button', { name: /write a review/i })).toBeInTheDocument())

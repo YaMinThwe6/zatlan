@@ -1,5 +1,5 @@
 {
-  "name": "binj-backend",
+  "name": "zatlan-backend",
   "version": "0.0.1",
   "private": true,
   "type": "module",
@@ -17,7 +17,7 @@
     "seed-search-catalog": "tsx --env-file=.env scripts/seedSearchCatalog.ts"
   },
   "dependencies": {
-    "@binj/shared-types": "workspace:*",
+    "@zatlan/shared-types": "workspace:*",
     "@google/genai": "^2.19.0",
     "cors": "^2.8.5",
     "express": "^4.21.2",

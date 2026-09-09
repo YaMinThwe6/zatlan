@@ -1,4 +1,4 @@
-import type { TasteMatch, WatchedByEntry, PersonSummary, TopFollowedPerson } from "@binj/shared-types";
+import type { TasteMatch, WatchedByEntry, PersonSummary, TopFollowedPerson } from "@zatlan/shared-types";
 import { requireDb } from "../lib/firebaseAdmin.js";
 import { AppError } from "../utils/AppError.js";
 import { significantWords } from "../lib/searchIndex.js";
@@ -270,7 +270,7 @@ export async function listFollowedCelebrities(uid: string) {
 // upsert — schema.md's "every credited person, not just top-billed").
 // Local-only, unlike movie search: there's no equivalent live "search
 // people directly" TMDB call already wired into this codebase the way
-// TMDB's movie search is, so this only ever finds someone BINJ has already
+// TMDB's movie search is, so this only ever finds someone ZATLAN has already
 // ingested via some movie's credits — not the entire universe of actors.
 export async function searchPeopleService(rawQuery: unknown): Promise<{ items: PersonSummary[] }> {
   const query = typeof rawQuery === "string" ? rawQuery.trim() : "";
@@ -305,7 +305,7 @@ export async function searchPeopleService(rawQuery: unknown): Promise<{ items: P
 // GET /movies/:movieId/watchedBy — hld.md §5a, api-contracts.md §5. Never a
 // global "everyone who watched this" list — fans out from the caller's own
 // (bounded) `following` list and checks each one directly, so cost scales
-// with how many people the caller follows, not with BINJ's whole user base.
+// with how many people the caller follows, not with ZATLAN's whole user base.
 //
 // Two independent privacy checks per followed user, both must pass:
 //   - list-level: users/{uid}.listVisible

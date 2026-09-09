@@ -1,4 +1,4 @@
-import type { Review } from "@binj/shared-types";
+import type { Review } from "@zatlan/shared-types";
 import { requireDb } from "../lib/firebaseAdmin.js";
 import { AppError } from "../utils/AppError.js";
 
@@ -56,7 +56,7 @@ export async function upsertReview(uid: string, movieId: string, body: ReviewInp
     const existing = reviewSnap.exists ? (reviewSnap.data() as { rating: number; deleted: boolean; createdAt: unknown }) : null;
     const isFirstTime = !existing || existing.deleted;
 
-    const currentAggregate = (freshMovieSnap.data()?.binjRating as { sum: number; count: number } | undefined) ?? { sum: 0, count: 0 };
+    const currentAggregate = (freshMovieSnap.data()?.zatlanRating as { sum: number; count: number } | undefined) ?? { sum: 0, count: 0 };
     const newAggregate = isFirstTime
       ? { sum: currentAggregate.sum + rating, count: currentAggregate.count + 1 }
       : { sum: currentAggregate.sum + (rating - existing!.rating), count: currentAggregate.count };
@@ -71,7 +71,7 @@ export async function upsertReview(uid: string, movieId: string, body: ReviewInp
       createdAt,
       updatedAt: now
     });
-    tx.update(movieRef, { binjRating: newAggregate });
+    tx.update(movieRef, { zatlanRating: newAggregate });
 
     return { createdAt, updatedAt: now };
   });
@@ -98,9 +98,9 @@ export async function deleteReview(uid: string, movieId: string): Promise<void> 
       return "not_found" as const;
     }
     const rating = reviewSnap.data()?.rating as number;
-    const currentAggregate = (movieSnap.data()?.binjRating as { sum: number; count: number } | undefined) ?? { sum: 0, count: 0 };
+    const currentAggregate = (movieSnap.data()?.zatlanRating as { sum: number; count: number } | undefined) ?? { sum: 0, count: 0 };
     tx.update(movieRef, {
-      binjRating: { sum: Math.max(0, currentAggregate.sum - rating), count: Math.max(0, currentAggregate.count - 1) }
+      zatlanRating: { sum: Math.max(0, currentAggregate.sum - rating), count: Math.max(0, currentAggregate.count - 1) }
     });
     tx.update(reviewRef, { deleted: true, updatedAt: new Date() });
     return "deleted" as const;

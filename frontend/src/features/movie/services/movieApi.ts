@@ -1,6 +1,6 @@
 import { apiFetch } from '../../../lib/api'
-export type { MovieSummary, MovieDetail, MovieStatus, MovieStatusLite, MovieStatusMap, DiscoverMoviesResponse, Review, MyReview, WatchedByEntry, SimilarMovieItem, TopFollowedPerson, MyWatchedEntry, MyWatchlistEntry } from '@binj/shared-types'
-import type { MovieSummary, MovieDetail, MovieStatus, MovieStatusMap, DiscoverMoviesResponse, Review, MyReview, WatchedByEntry, SimilarMovieItem, TopFollowedPerson, MyWatchedEntry, MyWatchlistEntry } from '@binj/shared-types'
+export type { MovieSummary, MovieDetail, MovieStatus, MovieStatusLite, MovieStatusMap, DiscoverMoviesResponse, Review, MyReview, WatchedByEntry, SimilarMovieItem, TopFollowedPerson, MyWatchedEntry, MyWatchlistEntry } from '@zatlan/shared-types'
+import type { MovieSummary, MovieDetail, MovieStatus, MovieStatusMap, DiscoverMoviesResponse, Review, MyReview, WatchedByEntry, SimilarMovieItem, TopFollowedPerson, MyWatchedEntry, MyWatchlistEntry } from '@zatlan/shared-types'
 
 export function searchMovies(query: string): Promise<{ items: MovieSummary[] }> {
   return apiFetch(`/search/movies?q=${encodeURIComponent(query)}`)

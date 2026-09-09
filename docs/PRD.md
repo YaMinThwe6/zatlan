@@ -1,6 +1,6 @@
-# BINJ — Product Requirements Document
+# ZATLAN — Product Requirements Document
 
-**Project:** BINJ  
+**Project:** ZATLAN  
 **Program:** Pachamama 2026  
 **Status:** Prototype / Build Phase  
 **Document Status:** Updated — HLD walkthrough decisions incorporated (streaming availability, follow/social model, recommendations, watch-party scope, movie rooms, location discovery, search, notifications, block/mute); AI-assisted content moderation and future monetization added. See [docs/hld.md](hld.md) for the full technical design and flow-level detail behind these decisions.  
@@ -10,13 +10,13 @@
 
 # 1. Product Overview
 
-BINJ is a social movie platform designed to help people discover movies, connect with people who share their movie interests, and turn watching a movie into a shared social experience.
+ZATLAN is a social movie platform designed to help people discover movies, connect with people who share their movie interests, and turn watching a movie into a shared social experience.
 
-The core idea behind BINJ is:
+The core idea behind ZATLAN is:
 
 > **"I want to watch this movie. Who else wants to watch it with me?"**
 
-BINJ combines:
+ZATLAN combines:
 - Movie discovery
 - Movie metadata
 - Personal movie activity
@@ -45,13 +45,13 @@ People may also want to:
 - Discuss movies before, during, and after watching
 - Discover movie-related events nearby
 
-BINJ aims to bring these activities together into a single social movie experience.
+ZATLAN aims to bring these activities together into a single social movie experience.
 
 ---
 
 # 3. Product Vision
 
-BINJ aims to evolve movie watching from an individual activity into a social experience.
+ZATLAN aims to evolve movie watching from an individual activity into a social experience.
 
 The core experience is:
 
@@ -134,13 +134,13 @@ Movie detail pages should provide rich information such as:
 
 TMDB is the confirmed source for this rich, user-facing information (synopsis, poster, backdrop, genres, cast, crew, release info). IMDb/BigQuery is not used for posters or synopsis — see §16.
 
-**Decision — trailer playback redirects to YouTube, no embedded player.** TMDB's `videos` endpoint returns a YouTube video id (`trailerKey`) for the official trailer; the play button opens `youtube.com/watch?v={trailerKey}` in a new tab (web) / the system browser or YouTube app if installed (mobile), rather than an embedded in-app player. Simpler, no video-player component to build or maintain, and YouTube's own links already resolve into its native app automatically where installed — no custom deep-link handling needed on BINJ's side. The user stays on BINJ underneath (new tab/external app), so returning to the movie page after watching is a simple back/switch, not a lost place in the flow.
+**Decision — trailer playback redirects to YouTube, no embedded player.** TMDB's `videos` endpoint returns a YouTube video id (`trailerKey`) for the official trailer; the play button opens `youtube.com/watch?v={trailerKey}` in a new tab (web) / the system browser or YouTube app if installed (mobile), rather than an embedded in-app player. Simpler, no video-player component to build or maintain, and YouTube's own links already resolve into its native app automatically where installed — no custom deep-link handling needed on ZATLAN's side. The user stays on ZATLAN underneath (new tab/external app), so returning to the movie page after watching is a simple back/switch, not a lost place in the flow.
 
 ---
 
 # 7. Streaming Availability
 
-BINJ should help users identify where a movie is available to watch.
+ZATLAN should help users identify where a movie is available to watch.
 
 Example:
 
@@ -160,7 +160,7 @@ Airtel Xstream
 
 A future concept is:
 
-> One BINJ login that provides access across multiple streaming services.
+> One ZATLAN login that provides access across multiple streaming services.
 
 This is considered a **future integration** and is not part of the core prototype.
 
@@ -187,23 +187,23 @@ Users should also have privacy/security preferences.
 - Following someone can require the target user's approval (a per-user setting, default: off — open follow, Instagram-style) before it becomes an active relationship.
 - Users can **block** another user (severs any existing follow relationship both directions; neither can see or interact with the other afterward) or **mute** one (lighter — hides their content from the muter's view only, no effect on the muted user).
 
-**Decision — account creation:** handled by Firebase Authentication directly (frontend talks to it, not the backend); a BINJ profile document is created automatically on first login after sign-up, with the privacy defaults above. Onboarding may optionally ask for a few favorite genres to bootstrap recommendations, but this isn't required — new users without any signal get a trending/popular fallback instead.
+**Decision — account creation:** handled by Firebase Authentication directly (frontend talks to it, not the backend); a ZATLAN profile document is created automatically on first login after sign-up, with the privacy defaults above. Onboarding may optionally ask for a few favorite genres to bootstrap recommendations, but this isn't required — new users without any signal get a trending/popular fallback instead.
 
-**Decision — passwordless, three sign-in paths.** BINJ never collects or stores a password. Sign-in is: **Google OAuth, Microsoft OAuth** (both native Firebase Authentication providers, zero extra backend work), and **Email + OTP** for users without either account — a typed one-time code sent to their email, verified server-side, never a password. The OTP path is a real new integration (Firebase's own passwordless option is a click-through email link, not a typed code — see [docs/hld.md](hld.md) §13 for the custom generate/hash/verify/custom-token flow it needs), not just a config change. Apple Sign-In was considered and deferred in favor of Microsoft. Passkey (WebAuthn) sign-in remains deferred — Firebase Authentication has no native passkey provider as of mid-2026, so adding it means a real new integration (a third-party Firebase Extension or a custom WebAuthn implementation).
+**Decision — passwordless, three sign-in paths.** ZATLAN never collects or stores a password. Sign-in is: **Google OAuth, Microsoft OAuth** (both native Firebase Authentication providers, zero extra backend work), and **Email + OTP** for users without either account — a typed one-time code sent to their email, verified server-side, never a password. The OTP path is a real new integration (Firebase's own passwordless option is a click-through email link, not a typed code — see [docs/hld.md](hld.md) §13 for the custom generate/hash/verify/custom-token flow it needs), not just a config change. Apple Sign-In was considered and deferred in favor of Microsoft. Passkey (WebAuthn) sign-in remains deferred — Firebase Authentication has no native passkey provider as of mid-2026, so adding it means a real new integration (a third-party Firebase Extension or a custom WebAuthn implementation).
 
-**Decision — accent theme is user-selectable, locked down.** BINJ's UI uses a glowing accent color (dark base, one color carrying the CTA/rating/highlight moments) rather than a flat/muted palette — it should feel energetic, not corporate. **Six accent options ship at launch, chosen and finalized by the user: emerald (default), cyan, purple, pink, amber, red** — a per-user setting (`accentTheme`), same shape as `themePreference` above. Pink was deliberately lightened (`#FF7AC2`, not a deeper rose) after review found it too close to red at a glance — the two need to stay visually distinct as separate theme choices. **TMDB's rating is always a fixed neutral white/gray**, never themed — only the BINJ rating *number*, the primary CTA, and a handful of other explicitly-chosen elements (the "Watch Together" action, Write a review / Create a watch party / Join buttons, the Home nav highlight) carry the selected accent, so theming stays deliberate rather than spreading to every colored pixel on screen. **One deliberate exception: every star icon (BINJ's rating star, review-card stars) is a fixed gold (`#FFC107`), not themed** — ratings get the universal "gold star" convention users already recognize from every other rating surface (App Store, Play Store, Amazon, etc.), while the number next to it still carries BINJ's chosen brand color. This was an explicit call weighed against the earlier decision to avoid IMDb's specific brand color (`#F5C518`) — a small gold star icon is a near-universal UI convention that predates and outlives any one app's branding, unlike making gold BINJ's actual primary/dominant color the way it is IMDb's. See the design canvas referenced from this project for the full exploration history (flat colors, magenta, chartreuse, cyan-as-primary) and why each was rejected before landing here.
+**Decision — accent theme is user-selectable, locked down.** ZATLAN's UI uses a glowing accent color (dark base, one color carrying the CTA/rating/highlight moments) rather than a flat/muted palette — it should feel energetic, not corporate. **Six accent options ship at launch, chosen and finalized by the user: emerald (default), cyan, purple, pink, amber, red** — a per-user setting (`accentTheme`), same shape as `themePreference` above. Pink was deliberately lightened (`#FF7AC2`, not a deeper rose) after review found it too close to red at a glance — the two need to stay visually distinct as separate theme choices. **TMDB's rating is always a fixed neutral white/gray**, never themed — only the ZATLAN rating *number*, the primary CTA, and a handful of other explicitly-chosen elements (the "Watch Together" action, Write a review / Create a watch party / Join buttons, the Home nav highlight) carry the selected accent, so theming stays deliberate rather than spreading to every colored pixel on screen. **One deliberate exception: every star icon (ZATLAN's rating star, review-card stars) is a fixed gold (`#FFC107`), not themed** — ratings get the universal "gold star" convention users already recognize from every other rating surface (App Store, Play Store, Amazon, etc.), while the number next to it still carries ZATLAN's chosen brand color. This was an explicit call weighed against the earlier decision to avoid IMDb's specific brand color (`#F5C518`) — a small gold star icon is a near-universal UI convention that predates and outlives any one app's branding, unlike making gold ZATLAN's actual primary/dominant color the way it is IMDb's. See the design canvas referenced from this project for the full exploration history (flat colors, magenta, chartreuse, cyan-as-primary) and why each was rejected before landing here.
 
 ---
 
 # 9. People Discovery
 
-One of BINJ's important social features is discovering people based on shared movie interests.
+One of ZATLAN's important social features is discovering people based on shared movie interests.
 
 For a movie, users should be able to see:
 
 > **People who watched this movie**
 
-BINJ should eventually support discovery such as:
+ZATLAN should eventually support discovery such as:
 
 > "People with similar movie tastes who watched this movie."
 
@@ -232,7 +232,7 @@ User C
 
 # 10. Recommendations
 
-BINJ should provide personalized movie recommendations.
+ZATLAN should provide personalized movie recommendations.
 
 Potential recommendation signals include:
 
@@ -298,9 +298,9 @@ In-person
 **Decision — MVP scope is presence only:** live "X people watching now" for an event's movie room, via Firebase Realtime Database (`onDisconnect()`-based, so presence updates instantly when someone's connection drops — no polling). No playback control, no synchronization.
 
 **Decision — full Teleparty-style playback sync (play/pause/seek across streaming platforms) is explicitly Phase 2, out of scope for the Pachamama submission**, investigated and documented, not just deferred by default:
-- **No official API/SDK path exists** for a third-party consumer app on any of Netflix, Prime Video, or JioHotstar — their partner programs are for certified hardware/device manufacturers, a different relationship than BINJ would have. Not a pricing-tier problem; structurally unavailable regardless of paid-platform status.
-- **Confirmed mechanism, if pursued later:** an app-owned embedded browser (WebView/WebView2/CEF) loads the platform's real site, the user authenticates directly with the platform (confirmed technique — real OTP login), and injected code synchronizes the embedded player. This only works inside a **native app** — BINJ's web frontend cannot do this (cross-origin/embedding restrictions block a website from controlling another website's content) — meaning Phase 2 is a second product (native Android/Windows, optionally iOS), not a backend feature addition.
-- **Real blockers:** per-platform DRM provisioning (Widevine/FairPlay), per-platform player reverse-engineering maintained indefinitely and fragile to platform UI changes, active adversarial detection by the platforms, and real legal/ToS exposure (DRM-circumvention-adjacent) that compounds if BINJ becomes a paid/commercial platform.
+- **No official API/SDK path exists** for a third-party consumer app on any of Netflix, Prime Video, or JioHotstar — their partner programs are for certified hardware/device manufacturers, a different relationship than ZATLAN would have. Not a pricing-tier problem; structurally unavailable regardless of paid-platform status.
+- **Confirmed mechanism, if pursued later:** an app-owned embedded browser (WebView/WebView2/CEF) loads the platform's real site, the user authenticates directly with the platform (confirmed technique — real OTP login), and injected code synchronizes the embedded player. This only works inside a **native app** — ZATLAN's web frontend cannot do this (cross-origin/embedding restrictions block a website from controlling another website's content) — meaning Phase 2 is a second product (native Android/Windows, optionally iOS), not a backend feature addition.
+- **Real blockers:** per-platform DRM provisioning (Widevine/FairPlay), per-platform player reverse-engineering maintained indefinitely and fragile to platform UI changes, active adversarial detection by the platforms, and real legal/ToS exposure (DRM-circumvention-adjacent) that compounds if ZATLAN becomes a paid/commercial platform.
 
 Full analysis and the confirmed mechanism are in [docs/hld.md](hld.md) §11 and §15.
 
@@ -338,7 +338,7 @@ The important concept is:
 
 # 14. Location-Based Discovery
 
-BINJ should support discovery based on location and time.
+ZATLAN should support discovery based on location and time.
 
 Users may search/discover based on:
 - Movie
@@ -365,7 +365,7 @@ Location privacy must be treated as a first-class consideration.
 
 # 15. Communities & Forums
 
-BINJ may support user-created communities similar to subreddit-style communities.
+ZATLAN may support user-created communities similar to subreddit-style communities.
 
 Potential capabilities:
 - Create communities
@@ -386,7 +386,7 @@ Christopher Nolan
 90s Movies
 ```
 
-A full community/forum system is considered lower priority for the prototype and should not delay the core BINJ experience.
+A full community/forum system is considered lower priority for the prototype and should not delay the core ZATLAN experience.
 
 ---
 
@@ -396,7 +396,7 @@ No single external movie dataset needs to provide everything — each source has
 
 ## 16.1 IMDb / BigQuery — Analytics Only (revised — no longer used for live rating display)
 
-The IMDb dataset was investigated as a potential movie-data foundation. It does not provide the information BINJ's movie discovery experience needs for presentation, particularly:
+The IMDb dataset was investigated as a potential movie-data foundation. It does not provide the information ZATLAN's movie discovery experience needs for presentation, particularly:
 - Movie posters/images
 - Backdrop images
 - Movie synopsis/overview
@@ -426,20 +426,20 @@ TMDB API is the primary, confirmed source for rich, user-facing movie informatio
 
 TMDB API usage will be subject to TMDB's API terms and attribution requirements (see §27).
 
-## 16.3 BINJ Ratings vs. TMDB Ratings
+## 16.3 ZATLAN Ratings vs. TMDB Ratings
 
-BINJ ratings must remain distinct from the third-party rating shown alongside a movie — displayed separately, not merged into one score. (Originally scoped as "IMDb rating" — superseded by §16.1: the displayed third-party rating is TMDB's, not IMDb's.)
+ZATLAN ratings must remain distinct from the third-party rating shown alongside a movie — displayed separately, not merged into one score. (Originally scoped as "IMDb rating" — superseded by §16.1: the displayed third-party rating is TMDB's, not IMDb's.)
 
 Example:
 
 ```text
 TMDB: 8.7 / 10
-BINJ: 4.6 / 5
+ZATLAN: 4.6 / 5
 ```
 
-## 16.4 BINJ-Generated Data
+## 16.4 ZATLAN-Generated Data
 
-BINJ will generate its own application and social data, including:
+ZATLAN will generate its own application and social data, including:
 - Users
 - Profiles
 - Watched history
@@ -462,38 +462,38 @@ Revised from the original direction — IMDb/BigQuery is analytics-only and expl
 ```text
         TMDB ──────────────┐
                             ▼
-                      BINJ Backend ──── Firestore ──── User / Social Data
+                      ZATLAN Backend ──── Firestore ──── User / Social Data
                             │                │
                             ▼                ▼
-                         Gemini      (movies collection = BINJ Movie DB)
+                         Gemini      (movies collection = ZATLAN Movie DB)
 
         IMDb → BigQuery ── (analytics only — batch jobs, disconnected from the live path above)
 ```
 
-**BINJ Movie DB is a Firestore collection** (`movies`), not a separate database — same store as everything else, no reason found yet to split it out. See §17.1.
+**ZATLAN Movie DB is a Firestore collection** (`movies`), not a separate database — same store as everything else, no reason found yet to split it out. See §17.1.
 
 ## 17.1 Movie Data Request Flow
 
-BINJ does not call TMDB every time a user opens a movie. BINJ maintains its own persistent movie database, checked before falling back to TMDB:
+ZATLAN does not call TMDB every time a user opens a movie. ZATLAN maintains its own persistent movie database, checked before falling back to TMDB:
 
 ```text
 User
  ↓
-BINJ Backend
+ZATLAN Backend
  ↓
 Cache
  ├── HIT → Return
  │
  └── MISS
        ↓
-   BINJ Movie DB
+   ZATLAN Movie DB
        ├── HIT → Return
        │
        └── MISS
              ↓
           TMDB API
              ↓
-       Store in BINJ DB
+       Store in ZATLAN DB
              ↓
        Populate cache
              ↓
@@ -502,25 +502,25 @@ Cache
 
 Responsibilities:
 - **Cache** — performance, reduces repeated reads/API calls
-- **BINJ Movie DB** — persistent, application-level source of truth for movie records BINJ has already imported
-- **TMDB** — external source consulted only when BINJ does not yet have the requested movie/data
+- **ZATLAN Movie DB** — persistent, application-level source of truth for movie records ZATLAN has already imported
+- **TMDB** — external source consulted only when ZATLAN does not yet have the requested movie/data
 
 ## 17.2 Automatic Movie Ingestion
 
-BINJ does not manually add every movie, and does not need to import the entire TMDB catalogue for the prototype. Initial approach: **on-demand ingestion**, so the BINJ movie database grows organically based on what users actually search for.
+ZATLAN does not manually add every movie, and does not need to import the entire TMDB catalogue for the prototype. Initial approach: **on-demand ingestion**, so the ZATLAN movie database grows organically based on what users actually search for.
 
 ```text
 User searches for a movie
         ↓
 Check cache → miss
         ↓
-Check BINJ Movie DB → miss
+Check ZATLAN Movie DB → miss
         ↓
 Search TMDB → found
         ↓
 Fetch required TMDB details
         ↓
-Store in BINJ DB
+Store in ZATLAN DB
         ↓
 Populate cache
         ↓
@@ -533,9 +533,9 @@ Return to user
 
 ## 17.5 Search / Discovery Index
 
-**Decision:** the search index is **bulk-seeded on a schedule**, fully decoupled from the on-demand, per-movie detail ingestion above — a batch job pulls a broad slice of the TMDB catalog and indexes it upfront and periodically, so search always hits BINJ's own pre-populated index and never calls TMDB live. §17.2's on-demand flow still runs, but only once a specific result is selected, fetching the full detail record.
+**Decision:** the search index is **bulk-seeded on a schedule**, fully decoupled from the on-demand, per-movie detail ingestion above — a batch job pulls a broad slice of the TMDB catalog and indexes it upfront and periodically, so search always hits ZATLAN's own pre-populated index and never calls TMDB live. §17.2's on-demand flow still runs, but only once a specific result is selected, fetching the full detail record.
 
-**Decision — Vertex AI Search (Media vertical), not a non-Google search service.** Algolia, Typesense, and Meilisearch are not Google products; Vertex AI Search is a genuine Google Cloud product with a vertical built for content-catalog search specifically, so per BINJ's Google-first mandate it's the correct first candidate. $300 in available GCP credit covers testing it; exact pricing at scale is being verified before full commitment. **Fallback if it proves too costly/complex:** Firestore word-prefix indexing (titles indexed as arrays of word-level prefixes, queried via `array-contains`) — weaker typo tolerance, but fully Google-native (just Firestore) and free.
+**Decision — Vertex AI Search (Media vertical), not a non-Google search service.** Algolia, Typesense, and Meilisearch are not Google products; Vertex AI Search is a genuine Google Cloud product with a vertical built for content-catalog search specifically, so per ZATLAN's Google-first mandate it's the correct first candidate. $300 in available GCP credit covers testing it; exact pricing at scale is being verified before full commitment. **Fallback if it proves too costly/complex:** Firestore word-prefix indexing (titles indexed as arrays of word-level prefixes, queried via `array-contains`) — weaker typo tolerance, but fully Google-native (just Firestore) and free.
 
 ## 17.3 IMDb ↔ TMDB Identifier Mapping
 
@@ -556,18 +556,18 @@ IMDb ID
           └── other metadata
 ```
 
-This lets BINJ combine useful parts of both sources without duplicating responsibilities.
+This lets ZATLAN combine useful parts of both sources without duplicating responsibilities.
 
 ## 17.4 Architectural Principle: Not a Thin TMDB Client
 
-BINJ is **not** a thin TMDB client — it is its own movie/social platform:
+ZATLAN is **not** a thin TMDB client — it is its own movie/social platform:
 
 ```text
 TMDB              → rich movie information + the rating actually shown: posters, backdrops, synopsis,
                       genres, cast/crew, metadata, TMDB rating
 IMDb + BigQuery    → analytics only, off the live path: vote data, structured IMDb data,
                       taste-matching signals (§9)
-BINJ Database      → movie records used by BINJ: users, watchlists, watched history, ratings, reviews,
+ZATLAN Database      → movie records used by ZATLAN: users, watchlists, watched history, ratings, reviews,
                       events, social graph, chat, notifications
 BigQuery           → analytics, recommendation signals, user behaviour, social/taste analysis
 Gemini             → AI-powered functionality
@@ -678,7 +678,7 @@ Live presence only (§12) — a small, low-overhead addition to the same Firebas
 Push notification delivery (§22).
 
 ### Vertex AI Search (Media vertical)
-**Decision — moved from "Potential" to confirmed, pending pricing verification.** Search/discovery index for the movie catalog (§17.5). A genuine Google Cloud product purpose-built for content-catalog search, preferred over non-Google alternatives (Algolia/Typesense/Meilisearch — none are Google products) per BINJ's Google-first mandate. $300 in available credit is being used to verify actual cost at scale before final commitment; Firestore-based search is the documented fallback if it proves impractical.
+**Decision — moved from "Potential" to confirmed, pending pricing verification.** Search/discovery index for the movie catalog (§17.5). A genuine Google Cloud product purpose-built for content-catalog search, preferred over non-Google alternatives (Algolia/Typesense/Meilisearch — none are Google products) per ZATLAN's Google-first mandate. $300 in available credit is being used to verify actual cost at scale before final commitment; Firestore-based search is the documented fallback if it proves impractical.
 
 ## Potential Google Cloud Services
 
@@ -695,7 +695,7 @@ We will not add services simply to increase the number of Google technologies us
 
 # 20. Development Methodology — TDD
 
-BINJ will be developed using **Test-Driven Development (TDD)**.
+ZATLAN will be developed using **Test-Driven Development (TDD)**.
 
 For each feature:
 
@@ -787,7 +787,7 @@ The prototype should prioritize a coherent end-to-end experience.
 - Movie search (Vertex AI Search, bulk-seeded from TMDB — §17.5)
 - Movie details
 - TMDB rating (superseded "IMDb rating" — §16.1)
-- BINJ ratings
+- ZATLAN ratings
 - Likes
 - Reviews (with optional per-review anonymity — hidden display name, still attributed server-side for moderation)
 - Watched list (with per-entry privacy override)
@@ -819,7 +819,7 @@ The prototype should prioritize a coherent end-to-end experience.
 - Monetization — Google Ads integration as a future revenue layer, must not compromise privacy/safety/core experience (§31)
 - Passkey (WebAuthn) sign-in, alongside OAuth — deferred since Firebase Authentication has no native passkey provider yet (§8, [docs/hld.md](hld.md) §11)
 
-P2 features must not delay the core BINJ prototype.
+P2 features must not delay the core ZATLAN prototype.
 
 ---
 
@@ -853,9 +853,9 @@ P2 features must not delay the core BINJ prototype.
 Scope:
 - Complete IMDb data analysis
 - Determine TMDB data requirements
-- Map data against BINJ features
+- Map data against ZATLAN features
 - Identify missing data
-- Identify synthetic/BINJ-generated data
+- Identify synthetic/ZATLAN-generated data
 - Finalize MVP scope
 - Finalize architecture
 - Finalize Google Cloud services
@@ -879,7 +879,7 @@ Scope:
 - Test environment
 - Frontend/backend/database integration
 
-**Definition of Done:** A user can authenticate and the basic BINJ frontend, backend, database and Google Cloud infrastructure work together.
+**Definition of Done:** A user can authenticate and the basic ZATLAN frontend, backend, database and Google Cloud infrastructure work together.
 
 ## Milestone 3 — Core Movie Experience
 **Target: August 30, 2026**
@@ -941,7 +941,7 @@ Scope:
 - September 6 — Stabilization and final polish
 - September 7 — Submission
 
-**Definition of Done:** BINJ works end-to-end, critical flows are tested, the prototype is deployed and presentable, and the project is ready for Pachamama submission.
+**Definition of Done:** ZATLAN works end-to-end, critical flows are tested, the prototype is deployed and presentable, and the project is ready for Pachamama submission.
 
 ---
 
@@ -966,7 +966,7 @@ Scope:
 
 # 26. Success Criteria
 
-BINJ should demonstrate:
+ZATLAN should demonstrate:
 1. A meaningful movie-data foundation.
 2. A working movie discovery experience.
 3. Data-driven recommendations or social discovery.
@@ -982,7 +982,7 @@ BINJ should demonstrate:
 
 # 27. External Data Attribution
 
-BINJ will properly attribute external data providers used by the application.
+ZATLAN will properly attribute external data providers used by the application.
 
 Potential sources include:
 - TMDB
@@ -991,7 +991,7 @@ Potential sources include:
 
 Attribution requirements will be implemented according to the applicable provider's current terms.
 
-For TMDB, the application will include the required attribution and identify that BINJ uses the TMDB API.
+For TMDB, the application will include the required attribution and identify that ZATLAN uses the TMDB API.
 
 ---
 
@@ -1014,17 +1014,17 @@ Resolved and removed from this list since the last update: movie data-source com
 
 # 29. Guiding Principle
 
-BINJ should not attempt to become every movie product at once.
+ZATLAN should not attempt to become every movie product at once.
 
 The prototype should prove one strong idea:
 
-> **BINJ helps people discover not only what to watch, but who to watch it with.**
+> **ZATLAN helps people discover not only what to watch, but who to watch it with.**
 
 The movie database provides the foundation.
 
 The user data creates the social graph.
 
-The combination creates the BINJ experience.
+The combination creates the ZATLAN experience.
 
 ---
 
@@ -1032,18 +1032,18 @@ The combination creates the BINJ experience.
 
 ## 30.1 Core Principle
 
-BINJ is a social movie platform. The purpose of social interaction on BINJ is to help people connect around movies, shows, watch parties, discussions, and shared interests.
+ZATLAN is a social movie platform. The purpose of social interaction on ZATLAN is to help people connect around movies, shows, watch parties, discussions, and shared interests.
 
 Chat rooms, forums, events, and user profiles must be designed and moderated to support movie-related social interaction.
 
 ## 30.2 Prohibited Behaviour
 
-BINJ should prohibit:
+ZATLAN should prohibit:
 - Sexting or sexually explicit conversations
 - Soliciting or requesting sexual content
 - Sharing sexually explicit images or media
 - Sexual solicitation or prostitution
-- Using BINJ primarily as a dating/hookup platform
+- Using ZATLAN primarily as a dating/hookup platform
 - Unwanted sexual advances or harassment
 - Sexual comments directed at other users
 - Sharing another person's private or intimate content
@@ -1054,7 +1054,7 @@ Normal discussion of movies that contain sexual themes, relationships, or mature
 
 ## 30.3 Chat Room Rules
 
-When creating a chat room or watch event, the creator must agree to BINJ's community rules.
+When creating a chat room or watch event, the creator must agree to ZATLAN's community rules.
 
 The room should have:
 - A clear movie/topic association
@@ -1065,7 +1065,7 @@ The room should have:
 - Block/mute functionality
 - Moderator/admin controls where applicable
 
-Private rooms are still subject to BINJ's Terms of Service and Community Guidelines.
+Private rooms are still subject to ZATLAN's Terms of Service and Community Guidelines.
 
 ## 30.4 Forum Rules
 
@@ -1077,7 +1077,7 @@ User-created communities/forums must have:
 - Content removal capabilities
 - User blocking/muting
 
-Community creators and moderators are responsible for maintaining the community within BINJ's rules.
+Community creators and moderators are responsible for maintaining the community within ZATLAN's rules.
 
 ## 30.5 User Reporting
 
@@ -1087,7 +1087,7 @@ Reports should support categories such as: sexual/explicit content, harassment, 
 
 ## 30.6 Enforcement
 
-BINJ should support progressive moderation actions where appropriate:
+ZATLAN should support progressive moderation actions where appropriate:
 1. Warning
 2. Content removal
 3. Temporary restriction
@@ -1098,7 +1098,7 @@ Severe violations may result in immediate account suspension.
 
 ## 30.7 Privacy & Safety
 
-BINJ should minimize unnecessary exposure of personal information.
+ZATLAN should minimize unnecessary exposure of personal information.
 
 Location-based features should use privacy-conscious defaults and should not expose a user's precise location to other users unless explicitly intended and consented to.
 
@@ -1108,9 +1108,9 @@ The exact moderation architecture, age requirements, and escalation process are 
 
 Resolves part of §30.7's "automated content detection" TBD.
 
-BINJ should support **context-aware** content moderation — detecting vulgarity, sexual solicitation, harassment, and other behaviour prohibited under §30.2, while distinguishing that from **legitimate discussion of mature or sexual themes within a movie itself** (e.g. discussing a film's sexual-assault subplot, a director's explicit content, or a controversial scene). §30.2 already draws this distinction in prose; here it needs to be something a moderation system can actually apply, not just a human-readable guideline.
+ZATLAN should support **context-aware** content moderation — detecting vulgarity, sexual solicitation, harassment, and other behaviour prohibited under §30.2, while distinguishing that from **legitimate discussion of mature or sexual themes within a movie itself** (e.g. discussing a film's sexual-assault subplot, a director's explicit content, or a controversial scene). §30.2 already draws this distinction in prose; here it needs to be something a moderation system can actually apply, not just a human-readable guideline.
 
-**Decision (P1):** if plain keyword/pattern-based detection proves insufficient to make that distinction reliably, BINJ will use an AI engine — an AI Agent — as the moderation layer. Context-aware judgment (is this message *about* a movie's content, or an actual solicitation happening in the room) is exactly the kind of task a keyword filter can't do but an LLM-based classifier can. Candidate approach: Gemini (already a confirmed BINJ technology, §19), applied to flagged/reported content and possibly to live message screening, rather than introducing a separate third-party AI vendor.
+**Decision (P1):** if plain keyword/pattern-based detection proves insufficient to make that distinction reliably, ZATLAN will use an AI engine — an AI Agent — as the moderation layer. Context-aware judgment (is this message *about* a movie's content, or an actual solicitation happening in the room) is exactly the kind of task a keyword filter can't do but an LLM-based classifier can. Candidate approach: Gemini (already a confirmed ZATLAN technology, §19), applied to flagged/reported content and possibly to live message screening, rather than introducing a separate third-party AI vendor.
 
 **Relationship to human moderation (§30.6):** AI-assisted detection is a **triage/flagging layer**, not a replacement for the human enforcement ladder already defined in §30.6 (warning → removal → restriction → suspension). Automated detection surfaces likely violations — e.g. auto-flagging into the report queue at higher priority, or auto-hiding content pending review for high-confidence cases — but a human moderator still makes the enforcement decision, consistent with [docs/hld.md](hld.md) §14b/§22, which already assume every enforcement action is moderator- or admin-initiated, not fully automated.
 
@@ -1120,7 +1120,7 @@ Exact detection scope (real-time message screening vs. report-triggered analysis
 
 ## 30.9 Product Design Principle
 
-BINJ should encourage:
+ZATLAN should encourage:
 
 > **"Find people who share your taste in movies."**
 
@@ -1134,17 +1134,17 @@ Social discovery, matching, events, chat, and forums should therefore remain anc
 
 # 31. Monetization (Future)
 
-BINJ's MVP and Pachamama submission are not monetization-focused — this section records a future direction, not a build requirement for the prototype.
+ZATLAN's MVP and Pachamama submission are not monetization-focused — this section records a future direction, not a build requirement for the prototype.
 
-**Decision — Google Ads integration is a candidate future monetization mechanism.** Consistent with BINJ's Google-first technology mandate (§19), Google Ads (e.g. AdSense/Ad Manager) is the natural first candidate over a non-Google ad network, if/when BINJ pursues monetization.
+**Decision — Google Ads integration is a candidate future monetization mechanism.** Consistent with ZATLAN's Google-first technology mandate (§19), Google Ads (e.g. AdSense/Ad Manager) is the natural first candidate over a non-Google ad network, if/when ZATLAN pursues monetization.
 
 **Constraint — advertising is a separate layer, not woven into the core product:**
-- Must not compromise user privacy — no ad-driven data sharing beyond what BINJ's own privacy model (§8, §30.7) already allows.
+- Must not compromise user privacy — no ad-driven data sharing beyond what ZATLAN's own privacy model (§8, §30.7) already allows.
 - Must not compromise user safety — ad content is still subject to §30's moderation/safety standards.
-- Must not compromise the core movie/social experience — the product BINJ demonstrates for Pachamama (§3, §23) should not be shaped around ad placement.
+- Must not compromise the core movie/social experience — the product ZATLAN demonstrates for Pachamama (§3, §23) should not be shaped around ad placement.
 
 Out of scope for the prototype (see §22 P2) — recorded here so it isn't lost, not because it's scheduled.
 
 ---
 
-**BINJ — Find your movie. Find your people. 🍿**
+**ZATLAN — Stories are better together. 🍿**

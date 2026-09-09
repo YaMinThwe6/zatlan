@@ -33,7 +33,7 @@ export function SuccessStep({ greeting, displayName, onComplete }: Props) {
           </svg>
         </div>
         <h1 className="font-serif text-[25px] font-semibold text-white">
-          {displayName ? `Welcome to BINJ, ${displayName}!` : 'Welcome to BINJ!'}
+          {displayName ? `Welcome to ZATLAN, ${displayName}!` : 'Welcome to ZATLAN!'}
         </h1>
         <p className="mt-2.5 text-sm text-text-muted">{greeting ?? "Your account is ready."}</p>
         {error && (

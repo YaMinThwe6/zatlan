@@ -1,4 +1,4 @@
-// @binj/shared-types — API request/response DTOs shared between backend and
+// @zatlan/shared-types — API request/response DTOs shared between backend and
 // frontend, so the two sides can't silently drift apart. Type-only: this
 // package has no runtime code, only `import type` from it.
 export * from './user.js'

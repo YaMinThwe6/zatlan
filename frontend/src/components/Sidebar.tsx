@@ -81,12 +81,8 @@ export function Sidebar({ active }: { active?: 'home' | 'search' | 'events' | 'p
   return (
     <aside className="hidden w-58 flex-none flex-col gap-7 border-r border-border-soft px-4.5 py-6 lg:flex">
       <div>
-        <span className="font-serif text-[22px] font-bold text-accent">BINJ</span>
-        <p className="mt-1.5 text-[11px] leading-snug text-text-muted">
-          Find your movie.
-          <br />
-          Find your people.
-        </p>
+        <span className="font-serif text-[22px] font-bold text-accent">ZATLAN</span>
+        <p className="mt-1.5 text-[11px] leading-snug text-text-muted">Stories are better together.</p>
       </div>
 
       <nav className="flex flex-col gap-0.5">

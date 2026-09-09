@@ -132,7 +132,7 @@ describe('Profile', () => {
     renderWithRouter()
 
     await waitFor(() => expect(screen.getByText('Rohan')).toBeInTheDocument())
-    expect(screen.getByText('BINJ')).toBeInTheDocument() // Sidebar's own logo mark
+    expect(screen.getByText('ZATLAN')).toBeInTheDocument() // Sidebar's own logo mark
     await waitFor(() => expect(getMe).toHaveBeenCalled()) // AppHeader fetching its own `me`
   })
 

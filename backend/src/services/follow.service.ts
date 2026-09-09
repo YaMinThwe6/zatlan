@@ -1,4 +1,4 @@
-import type { FollowRequest } from "@binj/shared-types";
+import type { FollowRequest } from "@zatlan/shared-types";
 import { requireDb } from "../lib/firebaseAdmin.js";
 import { writeNotification } from "../lib/notify.js";
 import { AppError } from "../utils/AppError.js";

@@ -1,4 +1,4 @@
-import type { MovieSummary } from "@binj/shared-types";
+import type { MovieSummary } from "@zatlan/shared-types";
 import { env } from "./env.js";
 
 const TMDB_BASE = "https://api.themoviedb.org/3";

@@ -1,4 +1,4 @@
-# BINJ — Backend & Monorepo Conventions
+# ZATLAN — Backend & Monorepo Conventions
 
 Written 2026-08-29, after the codebase had already grown past its initial scaffold — this document exists because that growth surfaced real gaps (no logging, no lint/format tooling, routes mixing HTTP handling with business logic) worth naming and fixing deliberately, rather than letting each new feature branch improvise its own answer. Partly informed by a reference project (`lms-server-course-core`) the user pointed at for backend structure — some of its conventions are adopted here, some are explicitly declined; each says why.
 
@@ -19,7 +19,7 @@ Written 2026-08-29, after the codebase had already grown past its initial scaffo
 - `development` → colorized, human-readable single line
 - `production` → structured JSON (timestamp + level + message + metadata), suitable for a log aggregator
 
-Every route's `catch` block logs through `logger.error(...)` instead of `console.error(...)`. No log-shipping destination is wired up yet (the reference project sketches an HTTP transport for production; BINJ doesn't have a log server to point it at) — that's a real gap, tracked here rather than silently deferred, and the transport can be swapped in `logger.ts` alone when one exists, without touching any call site.
+Every route's `catch` block logs through `logger.error(...)` instead of `console.error(...)`. No log-shipping destination is wired up yet (the reference project sketches an HTTP transport for production; ZATLAN doesn't have a log server to point it at) — that's a real gap, tracked here rather than silently deferred, and the transport can be swapped in `logger.ts` alone when one exists, without touching any call site.
 
 **Security headers:** `helmet()` added to the Express app (`backend/src/app.ts`), matching the reference project. No downside, no API contract implication — just missing before.
 
@@ -45,12 +45,12 @@ One deliberate resource split during the migration: the old `routes/people.ts` b
 - No-content (204): via `Responder.noContent(res)`.
 - Error: `{ success: false, message: string, code: string, statusCode: number }` — via `Responder.error(res, code, message, statusCode)`, called from the single `globalErrorHandler` (`backend/src/middleware/errorHandler.ts`), never from individual routes/controllers.
 
-**Deliberate deviation from the reference project:** the reference pattern's error shape only carries a free-text `error` string. BINJ keeps a machine-readable `code` field (e.g. `MOVIE_NOT_FOUND`, `INVALID_RATING`) alongside `message` — dropping it would have been a real regression against the ~140 existing tests and the frontend, both of which branch on these codes, not against free-text messages.
+**Deliberate deviation from the reference project:** the reference pattern's error shape only carries a free-text `error` string. ZATLAN keeps a machine-readable `code` field (e.g. `MOVIE_NOT_FOUND`, `INVALID_RATING`) alongside `message` — dropping it would have been a real regression against the ~140 existing tests and the frontend, both of which branch on these codes, not against free-text messages.
 
 **Mechanics:**
 - `AppError` (`backend/src/utils/AppError.ts`) — `new AppError(code, message, statusCode)`, thrown from any service for an expected/business-rule failure (not found, invalid input, forbidden, conflict, restricted account, etc.).
 - `globalErrorHandler` — the *only* place that turns a thrown error into an HTTP response. An `AppError` maps directly via its own `code`/`message`/`statusCode`; anything else (a real bug, a Firestore outage) is logged via `logger.error` and mapped to a generic `500`/`"INTERNAL_ERROR"`/`"An unexpected error occurred."` — raw error messages are never leaked to the client.
-- `asyncHandler` (`backend/src/utils/asyncHandler.ts`) — wraps every controller in every route registration. BINJ's backend runs **Express 4**, which does not auto-forward a rejected async handler's error to error middleware; without this wrapper a thrown `AppError` becomes an unhandled rejection instead of a response.
+- `asyncHandler` (`backend/src/utils/asyncHandler.ts`) — wraps every controller in every route registration. ZATLAN's backend runs **Express 4**, which does not auto-forward a rejected async handler's error to error middleware; without this wrapper a thrown `AppError` becomes an unhandled rejection instead of a response.
 - `requireDb()` / `requireFirebaseAuth()` (`backend/src/lib/firebaseAdmin.ts`) — replace the old per-route `if (!db) return res.status(503).json(...)` boilerplate. A service calls `const db = requireDb();` and gets a non-null `Firestore`, or an `AppError("FIRESTORE_NOT_CONFIGURED"/"FIREBASE_NOT_CONFIGURED", ..., 503)` is thrown automatically.
 
 **Simplification made along the way:** the old per-route generic `catch (err) { ... return res.status(502).json({error:{code:"FIRESTORE_ERROR",...}}) }` wrapper was dropped everywhere except where a test specifically depends on it (only `movies.test.ts`'s TMDB-upstream-failure case, which keeps its own explicit `AppError("TMDB_UPSTREAM_ERROR", ..., 502)`). Every other unexpected error now bubbles to `globalErrorHandler`'s generic 500 fallback — services no longer need defensive generic try/catch blocks.

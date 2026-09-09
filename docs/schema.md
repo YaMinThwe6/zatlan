@@ -1,4 +1,4 @@
-# BINJ — Concrete Firestore Schema
+# ZATLAN — Concrete Firestore Schema
 
 Translates [data-model.md](data-model.md)'s entities into exact Firestore collections, field types, IDs, composite indexes, and security rules. Where a field type or ID strategy required a judgment call not already made in the HLD/data-model docs, it's called out inline — flag anything you want changed.
 
@@ -24,7 +24,7 @@ users/{uid}
   statusExpiresAt: timestamp | null      // only set for temporary restrict/suspend
   notificationPrefs: { emailEnabled: boolean }
   themePreference: "dark" | "light" | "system"   // default "dark"
-  accentTheme: "emerald" | "cyan" | "purple" | "pink" | "amber" | "red"   // default "emerald" — CTA + BINJ rating color; TMDB rating stays fixed neutral white
+  accentTheme: "emerald" | "cyan" | "purple" | "pink" | "amber" | "red"   // default "emerald" — CTA + ZATLAN rating color; TMDB rating stays fixed neutral white
   favoriteGenres: array<string> | null   // optional onboarding step, §13
   preferredLanguages: array<string> | null   // optional onboarding step, §13 — ISO 639-1 codes (e.g. ["en","ta","ko"]), region/language of cinema watched, not dubbing
   onboardingComplete: boolean             // default false — set true once the onboarding wizard finishes or is skipped past its last step, §13. Distinct from any single step's optionality: a user can skip every optional step and still be "done" with onboarding
@@ -58,8 +58,8 @@ movies/{movieId}                         // doc ID = TMDB id, as string
   voteAverage: number                    // TMDB rating
   voteCount: number                      // TMDB vote count, shown alongside the rating for credibility
   trailerKey: string | null              // YouTube video id (official trailer, YouTube-hosted, preferred)
-  binjRating: { sum: number, count: number }
-  likeCount: number                      // maintained the same way as binjRating.count, no averaging needed
+  zatlanRating: { sum: number, count: number }
+  likeCount: number                      // maintained the same way as zatlanRating.count, no averaging needed
   streamingProviders: array<{ name: string, type: "subscription"|"rent"|"buy", logo: string }>
   streamingLastFetched: timestamp | null
   lastFetched: timestamp | null          // full-detail fetch marker, §2

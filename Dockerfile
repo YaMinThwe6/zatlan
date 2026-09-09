@@ -1,8 +1,8 @@
-# Builds and runs binj-backend for Cloud Run. Build context is the repo root
+# Builds and runs zatlan-backend for Cloud Run. Build context is the repo root
 # (not backend/) because this is a pnpm workspace — the backend depends on
 # packages/shared-types via "workspace:*", so pnpm needs the whole workspace
 # to resolve it. Deploy with the repo root as source, e.g.:
-#   gcloud run deploy binj-backend --source . --region <region>
+#   gcloud run deploy zatlan-backend --source . --region <region>
 #
 # The runtime stage keeps the same backend/ nesting the build stage produces
 # (rather than flattening dist/ up to /app) specifically so pnpm's relative
@@ -19,13 +19,13 @@ RUN corepack enable && corepack prepare pnpm@10.24.0 --activate
 
 # Copy just the manifests first so this layer is cached across source-only
 # changes — installing here reruns only when a package.json/lockfile changes.
-# --filter binj-backend... (the "..." pulls in its workspace deps, i.e.
+# --filter zatlan-backend... (the "..." pulls in its workspace deps, i.e.
 # shared-types) skips installing the frontend workspace's much larger,
 # unrelated dependency tree (React, Vite, Tailwind, ...) entirely.
 COPY pnpm-workspace.yaml package.json pnpm-lock.yaml ./
 COPY backend/package.json backend/package.json
 COPY packages/shared-types/package.json packages/shared-types/package.json
-RUN pnpm install --frozen-lockfile --filter binj-backend...
+RUN pnpm install --frozen-lockfile --filter zatlan-backend...
 
 # Now the actual source, and build just the backend workspace. shared-types
 # has no build step of its own (its package.json points straight at .ts
@@ -33,7 +33,7 @@ RUN pnpm install --frozen-lockfile --filter binj-backend...
 # erases entirely at compile time, so it contributes nothing to dist/ output.
 COPY backend backend
 COPY packages/shared-types packages/shared-types
-RUN pnpm --filter binj-backend run build
+RUN pnpm --filter zatlan-backend run build
 
 FROM node:22-alpine AS runtime
 WORKDIR /app
