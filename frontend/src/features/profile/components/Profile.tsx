@@ -231,6 +231,22 @@ export function Profile() {
       .catch((err) => setError(err instanceof Error ? err.message : 'Failed to load profile'))
   }, [uid])
 
+  // Real bug: Sidebar's Watchlist/Watched/Reviews links navigate to
+  // /profile/:myUid?tab=... — while already sitting on your own profile
+  // page, that's a same-route, query-only navigation, so this component
+  // never unmounts and the useState initializer above (which only ever runs
+  // once) never sees the new ?tab=. This keeps `tab` in sync with it on
+  // every subsequent navigation too, not just the first mount. Doesn't
+  // fight the in-page tab buttons below — those call setTab directly
+  // without touching the URL, so searchParams never changes because of them.
+  useEffect(() => {
+    const urlTab = searchParams.get('tab')
+    if (urlTab && TABS.some((t) => t.id === urlTab)) {
+      setTab(urlTab as Tab)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams])
+
   const isSelf = profile?.relationship === 'self'
 
   useEffect(() => {
