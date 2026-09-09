@@ -4,6 +4,12 @@ import { getNotifications, markNotificationRead, clearAllNotifications, type Not
 import { notificationText, notificationTarget, formatNotificationTime } from '../lib/notificationCopy'
 
 const DROPDOWN_LIMIT = 8
+// Simple polling for now, just to keep the badge from going stale while a
+// page just sits open — not real-time. A real-time version of this (a
+// Firestore onSnapshot listener on users/{uid}/notifications, the same
+// pattern RoomChat.tsx's subscribeToMessages already uses for messages)
+// is a better long-term fit and is on the backlog; this is the interim fix.
+const POLL_INTERVAL_MS = 90_000
 
 // The bell icon shared by AppHeader (desktop) and Home.tsx's own mobile
 // header — previously each hand-rolled its own copy that only ever showed an
@@ -21,15 +27,20 @@ export function NotificationBell() {
 
   useEffect(() => {
     let cancelled = false
-    getNotifications(true)
-      .then((res) => {
-        if (!cancelled) setUnreadCount(res.items.length)
-      })
-      .catch(() => {
-        if (!cancelled) setUnreadCount(0)
-      })
+    function fetchUnreadCount() {
+      getNotifications(true)
+        .then((res) => {
+          if (!cancelled) setUnreadCount(res.items.length)
+        })
+        .catch(() => {
+          if (!cancelled) setUnreadCount(0)
+        })
+    }
+    fetchUnreadCount()
+    const interval = setInterval(fetchUnreadCount, POLL_INTERVAL_MS)
     return () => {
       cancelled = true
+      clearInterval(interval)
     }
   }, [])
 

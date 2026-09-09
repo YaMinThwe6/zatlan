@@ -106,4 +106,43 @@ describe('NotificationBell', () => {
     await waitFor(() => expect(clearAllNotifications).toHaveBeenCalled())
     expect(await screen.findByLabelText('0 unread notifications')).toBeInTheDocument()
   })
+
+  it('re-polls the unread count every 90s, picking up a notification that arrived while the page just sat there', async () => {
+    // shouldAdvanceTime: true — real setTimeout/microtask progress for
+    // findByLabelText's internal polling and the mocked fetch's promise,
+    // while still letting advanceTimersByTimeAsync fast-forward the 90s
+    // interval on demand.
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    try {
+      getNotifications.mockResolvedValue({ items: [] })
+      renderWithRouter()
+      expect(await screen.findByLabelText('0 unread notifications')).toBeInTheDocument()
+      expect(getNotifications).toHaveBeenCalledTimes(1)
+
+      getNotifications.mockResolvedValue({ items: [item] })
+      await vi.advanceTimersByTimeAsync(90_000)
+
+      expect(getNotifications).toHaveBeenCalledTimes(2)
+      expect(await screen.findByLabelText('1 unread notifications')).toBeInTheDocument()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('stops polling once unmounted', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    try {
+      getNotifications.mockResolvedValue({ items: [] })
+      const { unmount } = renderWithRouter()
+      await screen.findByLabelText('0 unread notifications')
+      expect(getNotifications).toHaveBeenCalledTimes(1)
+
+      unmount()
+      await vi.advanceTimersByTimeAsync(90_000)
+
+      expect(getNotifications).toHaveBeenCalledTimes(1)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
 })
