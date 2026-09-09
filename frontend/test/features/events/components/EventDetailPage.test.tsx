@@ -122,6 +122,46 @@ describe('EventDetailPage', () => {
     expect(screen.queryByRole('button', { name: 'Join event' })).not.toBeInTheDocument()
   })
 
+  describe('in-person event location', () => {
+    const inPersonEvent = {
+      ...baseEvent,
+      mode: 'in-person' as const,
+      location: { area: 'Bandra West', city: 'Mumbai' }
+    }
+
+    it('shows a Get directions link to Google Maps once joined and the backend has released the exact coordinates', async () => {
+      getEvent.mockResolvedValue({ ...inPersonEvent, viewerStatus: 'joined', preciseLocation: { lat: 19.0596, lng: 72.8295 } })
+      renderAt()
+
+      const link = await screen.findByRole('link', { name: /get directions/i })
+      expect(link).toHaveAttribute('href', 'https://www.google.com/maps/dir/?api=1&destination=19.0596,72.8295')
+      expect(link).toHaveAttribute('target', '_blank')
+    })
+
+    it('shows the host their own event\'s directions too', async () => {
+      getEvent.mockResolvedValue({ ...inPersonEvent, viewerStatus: 'host', preciseLocation: { lat: 19.0596, lng: 72.8295 } })
+      renderAt()
+
+      expect(await screen.findByRole('link', { name: /get directions/i })).toBeInTheDocument()
+    })
+
+    it('does not show a directions link before joining — the backend never releases exact coordinates pre-join', async () => {
+      getEvent.mockResolvedValue({ ...inPersonEvent, viewerStatus: 'none', preciseLocation: null })
+      renderAt()
+
+      await screen.findByText('Bandra West, Mumbai')
+      expect(screen.queryByRole('link', { name: /get directions/i })).not.toBeInTheDocument()
+    })
+
+    it('shows no directions link for an online event even if joined', async () => {
+      getEvent.mockResolvedValue({ ...baseEvent, mode: 'online', viewerStatus: 'joined' })
+      renderAt()
+
+      await screen.findByRole('button', { name: 'Chat' })
+      expect(screen.queryByRole('link', { name: /get directions/i })).not.toBeInTheDocument()
+    })
+  })
+
   it('the host sees Cancel event instead of Join, and it deletes then navigates back to Events', async () => {
     vi.spyOn(window, 'confirm').mockReturnValue(true)
     getEvent.mockResolvedValue({ ...baseEvent, hostId: 'guest-1', viewerStatus: 'host' })

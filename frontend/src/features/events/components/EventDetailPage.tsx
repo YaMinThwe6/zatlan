@@ -218,6 +218,25 @@ export function EventDetailPage({ me }: Props) {
                     {event.location.area}, {event.location.city}
                   </div>
                 )}
+                {/* preciseLocation is only ever non-null in the response for
+                    the host or an already-joined participant (backend's own
+                    privacy gate, events.service.ts's toEventSummary) — no
+                    extra viewerStatus check needed here, trusting that gate
+                    rather than duplicating it client-side. */}
+                {event.mode === 'in-person' && event.preciseLocation && (
+                  <a
+                    href={`https://www.google.com/maps/dir/?api=1&destination=${event.preciseLocation.lat},${event.preciseLocation.lng}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex w-fit items-center gap-1.5 text-[12.5px] font-bold text-accent"
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                      <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
+                      <circle cx="12" cy="10" r="3" />
+                    </svg>
+                    Get directions
+                  </a>
+                )}
                 <div className="text-[12.5px] text-text-muted">
                   {event.participantCount}/{event.participantLimit} going
                   {event.requiresApproval ? ' · requires host approval' : ''}
