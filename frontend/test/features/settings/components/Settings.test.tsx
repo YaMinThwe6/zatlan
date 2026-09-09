@@ -10,15 +10,7 @@ const checkUsernameAvailable = vi.fn()
 vi.mock('../../../../src/features/onboarding/services/onboardingApi', () => ({ checkUsernameAvailable }))
 
 const getNotifications = vi.fn().mockResolvedValue({ items: [] })
-const getFollowRequests = vi.fn().mockResolvedValue({ items: [] })
-const approveFollowRequest = vi.fn()
-const denyFollowRequest = vi.fn()
-vi.mock('../../../../src/features/home/services/homeApi', () => ({
-  getNotifications,
-  getFollowRequests,
-  approveFollowRequest,
-  denyFollowRequest
-}))
+vi.mock('../../../../src/features/home/services/homeApi', () => ({ getNotifications }))
 
 const signOutUser = vi.fn()
 // Mutable so individual tests can simulate the OTP/custom-token sign-in path
@@ -62,9 +54,6 @@ afterEach(() => {
   checkUsernameAvailable.mockReset()
   getMe.mockClear()
   getNotifications.mockClear()
-  getFollowRequests.mockClear().mockResolvedValue({ items: [] })
-  approveFollowRequest.mockClear()
-  denyFollowRequest.mockClear()
   signOutUser.mockReset()
   authProviderData = [{ providerId: 'google.com' }]
 })
@@ -210,60 +199,6 @@ describe('Settings', () => {
     await waitFor(() => expect(onUpdateMe).toHaveBeenCalledWith(updated))
   })
 
-  describe('Follow requests', () => {
-    // Real gap this closes: the backend has always had GET/approve/deny
-    // follow-request endpoints, but nothing in the frontend ever called any
-    // of them — a user with "Approve followers manually" on had no way to
-    // see or act on a pending request anywhere in the UI.
-    it('fetches and shows each pending request, with Approve/Deny, when "Approve followers manually" is on', async () => {
-      getFollowRequests.mockResolvedValue({ items: [{ uid: 'req-1', displayName: 'Rohan', photoURL: null }] })
-      renderSettings({ ...baseMe, followRequiresApproval: true })
-
-      await waitFor(() => expect(getFollowRequests).toHaveBeenCalled())
-      expect(await screen.findByText('Rohan')).toBeInTheDocument()
-      expect(screen.getByRole('button', { name: 'Approve' })).toBeInTheDocument()
-      expect(screen.getByRole('button', { name: 'Deny' })).toBeInTheDocument()
-    })
-
-    it('does not fetch follow requests when "Approve followers manually" is off', async () => {
-      renderSettings({ ...baseMe, followRequiresApproval: false })
-
-      await waitFor(() => expect(screen.getByDisplayValue('Ananya Rao')).toBeInTheDocument())
-      expect(getFollowRequests).not.toHaveBeenCalled()
-    })
-
-    it('clicking Approve calls approveFollowRequest and removes that request from the list', async () => {
-      getFollowRequests.mockResolvedValue({ items: [{ uid: 'req-1', displayName: 'Rohan', photoURL: null }] })
-      approveFollowRequest.mockResolvedValue(undefined)
-      renderSettings({ ...baseMe, followRequiresApproval: true })
-
-      await screen.findByText('Rohan')
-      fireEvent.click(screen.getByRole('button', { name: 'Approve' }))
-
-      await waitFor(() => expect(approveFollowRequest).toHaveBeenCalledWith('req-1'))
-      await waitFor(() => expect(screen.queryByText('Rohan')).not.toBeInTheDocument())
-    })
-
-    it('clicking Deny calls denyFollowRequest and removes that request from the list', async () => {
-      getFollowRequests.mockResolvedValue({ items: [{ uid: 'req-1', displayName: 'Rohan', photoURL: null }] })
-      denyFollowRequest.mockResolvedValue(undefined)
-      renderSettings({ ...baseMe, followRequiresApproval: true })
-
-      await screen.findByText('Rohan')
-      fireEvent.click(screen.getByRole('button', { name: 'Deny' }))
-
-      await waitFor(() => expect(denyFollowRequest).toHaveBeenCalledWith('req-1'))
-      await waitFor(() => expect(screen.queryByText('Rohan')).not.toBeInTheDocument())
-    })
-
-    it('shows a friendly message instead of nothing when there are no pending requests', async () => {
-      getFollowRequests.mockResolvedValue({ items: [] })
-      renderSettings({ ...baseMe, followRequiresApproval: true })
-
-      expect(await screen.findByText(/no pending requests/i)).toBeInTheDocument()
-    })
-  })
-
   it('toggles "Hide me from public Discover suggestions"', async () => {
     const updated = { ...baseMe, hideFromDiscovery: true }
     updateMe.mockResolvedValue(updated)
@@ -278,15 +213,13 @@ describe('Settings', () => {
     await waitFor(() => expect(onUpdateMe).toHaveBeenCalledWith(updated))
   })
 
-  it('toggles "Email me about activity"', async () => {
-    const updated = { ...baseMe, notificationPrefs: { emailEnabled: false } }
-    updateMe.mockResolvedValue(updated)
-    const { onUpdateMe } = renderSettings()
+  it('shows "Email me about activity" disabled with a Coming soon tag — nothing actually sends this email yet', () => {
+    renderSettings()
 
-    fireEvent.click(screen.getByRole('switch', { name: /email me about activity/i }))
-
-    await waitFor(() => expect(updateMe).toHaveBeenCalledWith({ notificationPrefs: { emailEnabled: false } }))
-    await waitFor(() => expect(onUpdateMe).toHaveBeenCalledWith(updated))
+    const toggle = screen.getByRole('switch', { name: /email me about activity/i })
+    expect(toggle).toBeDisabled()
+    fireEvent.click(toggle)
+    expect(updateMe).not.toHaveBeenCalled()
   })
 
   it('shows the signed-in email and calls signOutUser when Sign out is clicked', () => {

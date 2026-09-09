@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { updateMe, type Me } from '../../../lib/api'
-import { getFollowRequests, approveFollowRequest, denyFollowRequest, type FollowRequest } from '../../home/services/homeApi'
 import { checkUsernameAvailable } from '../../onboarding/services/onboardingApi'
 import { useAuth } from '../../../lib/AuthContext'
 import { Sidebar } from '../../../components/Sidebar'
@@ -35,21 +34,40 @@ interface Props {
   onUpdateMe: (me: Me) => void
 }
 
-function ToggleSwitch({ checked, onChange, label }: { checked: boolean; onChange: () => void; label: string }) {
+function ToggleSwitch({
+  checked,
+  onChange,
+  label,
+  disabled
+}: {
+  checked: boolean
+  onChange: () => void
+  label: string
+  disabled?: boolean
+}) {
   return (
     <button
       type="button"
       role="switch"
       aria-checked={checked}
       aria-label={label}
+      disabled={disabled}
+      title={disabled ? 'Coming soon' : undefined}
       onClick={onChange}
-      className={`relative h-6 w-10.5 flex-none rounded-full transition-colors ${checked ? 'bg-accent' : 'bg-border'}`}
+      className={`relative h-6 w-10.5 flex-none rounded-full transition-colors disabled:cursor-default disabled:opacity-50 ${checked ? 'bg-accent' : 'bg-border'}`}
     >
       <span
         className={`absolute top-0.75 h-4.5 w-4.5 rounded-full transition-all ${checked ? 'right-0.75 bg-bg' : 'left-0.75 bg-text-faint'}`}
       />
     </button>
   )
+}
+
+// Visible "Coming soon" pill — same treatment Sidebar's disabled nav rows
+// use, so an unbuilt feature reads the same way everywhere in the app
+// rather than only a hover tooltip a user might never trigger.
+function ComingSoonTag() {
+  return <span className="flex-none rounded-full bg-[rgba(155,171,196,0.14)] px-2 py-0.5 text-[9.5px] font-bold text-text-faint">Coming soon</span>
 }
 
 // Always returns a label — Welcome.tsx's OTP-then-signInWithToken flow (the
@@ -89,65 +107,6 @@ export function Settings({ me, onUpdateMe }: Props) {
   const [profileSaved, setProfileSaved] = useState(false)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const requestIdRef = useRef(0)
-
-  // Real gap this closes: the backend has always had GET/approve/deny
-  // follow-request endpoints (follow.service.ts), but nothing in the
-  // frontend ever called any of them — same shape as the event
-  // join-request gap fixed earlier. Only fetched when the toggle it sits
-  // beside is actually on — it can never have anything to show otherwise.
-  const [followRequests, setFollowRequests] = useState<FollowRequest[] | null>(null)
-  const [followRequestsLoading, setFollowRequestsLoading] = useState(false)
-  // Per-request guard against a rapid double-click firing two overlapping
-  // approve/deny calls for the same requester, same pattern used for the
-  // event join-request Approve/Deny buttons.
-  const [actingOnRequest, setActingOnRequest] = useState<Set<string>>(new Set())
-
-  useEffect(() => {
-    if (!me.followRequiresApproval || followRequests !== null || followRequestsLoading) return
-    setFollowRequestsLoading(true)
-    getFollowRequests()
-      .then((res) => setFollowRequests(res.items))
-      .catch(() => {
-        // A minor section on a page that already loaded successfully — not
-        // worth an error state of its own, same treatment WatchedByFriends
-        // gives a failed fetch.
-      })
-      .finally(() => setFollowRequestsLoading(false))
-  }, [me.followRequiresApproval, followRequests, followRequestsLoading])
-
-  async function handleApproveFollowRequest(requesterUid: string) {
-    if (actingOnRequest.has(requesterUid)) return
-    setActingOnRequest((prev) => new Set(prev).add(requesterUid))
-    try {
-      await approveFollowRequest(requesterUid)
-      setFollowRequests((prev) => (prev ? prev.filter((r) => r.uid !== requesterUid) : prev))
-    } catch {
-      // Leaves the request in the list — the next Approve click just retries.
-    } finally {
-      setActingOnRequest((prev) => {
-        const next = new Set(prev)
-        next.delete(requesterUid)
-        return next
-      })
-    }
-  }
-
-  async function handleDenyFollowRequest(requesterUid: string) {
-    if (actingOnRequest.has(requesterUid)) return
-    setActingOnRequest((prev) => new Set(prev).add(requesterUid))
-    try {
-      await denyFollowRequest(requesterUid)
-      setFollowRequests((prev) => (prev ? prev.filter((r) => r.uid !== requesterUid) : prev))
-    } catch {
-      // Leaves the request in the list — the next Deny click just retries.
-    } finally {
-      setActingOnRequest((prev) => {
-        const next = new Set(prev)
-        next.delete(requesterUid)
-        return next
-      })
-    }
-  }
 
   const normalizedUsername = username.trim().toLowerCase()
   const usernameChanged = normalizedUsername !== (me.username ?? '')
@@ -386,45 +345,6 @@ export function Settings({ me, onUpdateMe }: Props) {
             </div>
             <ToggleSwitch checked={me.followRequiresApproval} onChange={() => togglePrivacyField('followRequiresApproval')} label="Approve followers manually" />
           </div>
-          {me.followRequiresApproval && (
-            <div className="border-b border-border-soft px-4.5 py-4">
-              <p className="mb-3 text-[11.5px] font-semibold text-text-secondary">Pending follow requests</p>
-              {followRequestsLoading && followRequests === null && <p className="text-[12px] text-text-muted">Loading…</p>}
-              {followRequests !== null && followRequests.length === 0 && <p className="text-[12px] text-text-muted">No pending requests.</p>}
-              {followRequests !== null && followRequests.length > 0 && (
-                <ul className="flex flex-col gap-2.5">
-                  {followRequests.map((request) => (
-                    <li key={request.uid} className="flex items-center justify-between gap-2.5">
-                      <div className="flex min-w-0 items-center gap-2.5">
-                        <span className="flex h-8 w-8 flex-none items-center justify-center rounded-full border border-[rgba(124,140,166,0.32)] bg-[rgba(124,140,166,0.14)] text-[12px] font-bold text-[#9BABC4]">
-                          {request.displayName.charAt(0).toUpperCase()}
-                        </span>
-                        <span className="min-w-0 truncate text-[12.5px] font-semibold text-text">{request.displayName}</span>
-                      </div>
-                      <div className="flex flex-none gap-2">
-                        <button
-                          type="button"
-                          disabled={actingOnRequest.has(request.uid)}
-                          onClick={() => handleApproveFollowRequest(request.uid)}
-                          className="rounded-lg bg-accent px-3 py-1.5 text-[11.5px] font-bold text-bg disabled:opacity-60"
-                        >
-                          Approve
-                        </button>
-                        <button
-                          type="button"
-                          disabled={actingOnRequest.has(request.uid)}
-                          onClick={() => handleDenyFollowRequest(request.uid)}
-                          className="rounded-lg border border-border px-3 py-1.5 text-[11.5px] font-bold text-text disabled:opacity-60"
-                        >
-                          Deny
-                        </button>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          )}
           <div className="flex items-center gap-3.5 px-4.5 py-4">
             <div className="flex-1">
               <p className="text-[13px] font-semibold text-text">Hide me from public Discover suggestions</p>
@@ -448,10 +368,18 @@ export function Settings({ me, onUpdateMe }: Props) {
         <div className="overflow-hidden rounded-2xl border border-border-soft bg-surface">
           <div className="flex items-center gap-3.5 px-4.5 py-4">
             <div className="flex-1">
-              <p className="text-[13px] font-semibold text-text">Email me about activity</p>
+              <div className="flex items-center gap-2">
+                <p className="text-[13px] font-semibold text-text">Email me about activity</p>
+                <ComingSoonTag />
+              </div>
               <p className="mt-0.5 text-[11px] text-text-muted">Event reminders, new followers and room replies.</p>
             </div>
-            <ToggleSwitch checked={me.notificationPrefs.emailEnabled} onChange={toggleEmailNotifications} label="Email me about activity" />
+            {/* Real gap: notificationPrefs.emailEnabled was just a stored
+                preference flag nothing ever read — the only place BINJ
+                actually sends email is auth.service.ts's OTP/verification
+                mail, unrelated to activity notifications. Disabled until
+                there's an actual email-sending path for these. */}
+            <ToggleSwitch checked={me.notificationPrefs.emailEnabled} onChange={toggleEmailNotifications} label="Email me about activity" disabled />
           </div>
         </div>
       </section>

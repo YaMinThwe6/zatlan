@@ -43,7 +43,7 @@ async function renderAt(path = '/notifications') {
     <MemoryRouter initialEntries={[path]}>
       <Routes>
         <Route path="/notifications" element={<Notifications />} />
-        <Route path="/settings" element={<p>Settings page</p>} />
+        <Route path="/people" element={<p>People page</p>} />
         <Route path="/profile/:uid" element={<p>Profile page</p>} />
         <Route path="/events/:eventId" element={<p>Event detail page</p>} />
         <Route path="/rooms/:roomId" element={<p>Room chat page</p>} />
@@ -118,7 +118,7 @@ describe('Notifications', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('Failed to load')
   })
 
-  it('clicking a followRequest notification marks it read and goes to Settings, where the approve/deny UI lives', async () => {
+  it('clicking a followRequest notification marks it read and goes to the People page\'s Requests tab, where the approve/deny UI lives', async () => {
     getMe.mockResolvedValue({ uid: 'me-1' })
     getNotifications.mockResolvedValue({ items: [{ ...baseItem, type: 'followRequest' }] })
     markNotificationRead.mockResolvedValue(undefined)
@@ -127,7 +127,7 @@ describe('Notifications', () => {
     fireEvent.click(await screen.findByText(/Rohan wants to connect/i))
 
     await waitFor(() => expect(markNotificationRead).toHaveBeenCalledWith('n1'))
-    expect(await screen.findByText('Settings page')).toBeInTheDocument()
+    expect(await screen.findByText('People page')).toBeInTheDocument()
   })
 
   it('clicking a followApproved notification goes to the approver’s profile', async () => {

@@ -40,13 +40,13 @@ export function notificationText(item: NotificationItem): string {
 }
 
 // Where clicking a notification should take you. followRequest goes to
-// Settings rather than the requester's own profile — the actual Approve/Deny
-// UI lives in Settings' Privacy section (Settings.tsx), not on a profile
-// page.
+// PeopleDiscovery's own Requests tab (?tab=requests) — the Approve/Deny UI
+// lives there, not in Settings (moved 2026-09-09; managing who follows you
+// is a people-management action, not a settings toggle).
 export function notificationTarget(item: NotificationItem): string | null {
   switch (item.type) {
     case 'followRequest':
-      return '/settings'
+      return '/people?tab=requests'
     case 'followApproved':
     case 'newFollower':
       return item.fromUserId ? `/profile/${item.fromUserId}` : null
