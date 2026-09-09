@@ -213,11 +213,15 @@ describe('Settings', () => {
     await waitFor(() => expect(onUpdateMe).toHaveBeenCalledWith(updated))
   })
 
-  it('shows "Email me about activity" disabled with a Coming soon tag — nothing actually sends this email yet', () => {
+  it('shows "Email me about activity" disabled and off, with a Coming soon tag — nothing actually sends this email yet', () => {
+    // baseMe.notificationPrefs.emailEnabled is true, but this toggle must
+    // never show "on" while disabled — real bug: it displayed checked,
+    // implying email was actually going out when nothing sends it.
     renderSettings()
 
     const toggle = screen.getByRole('switch', { name: /email me about activity/i })
     expect(toggle).toBeDisabled()
+    expect(toggle).toHaveAttribute('aria-checked', 'false')
     fireEvent.click(toggle)
     expect(updateMe).not.toHaveBeenCalled()
   })

@@ -390,8 +390,11 @@ export function Settings({ me, onUpdateMe }: Props) {
                 preference flag nothing ever read — the only place BINJ
                 actually sends email is auth.service.ts's OTP/verification
                 mail, unrelated to activity notifications. Disabled until
-                there's an actual email-sending path for these. */}
-            <ToggleSwitch checked={me.notificationPrefs.emailEnabled} onChange={toggleEmailNotifications} label="Email me about activity" disabled />
+                there's an actual email-sending path for these — shown as
+                off regardless of the stored value (which defaults to true),
+                since displaying "on" while disabled implied email was
+                actually going out. */}
+            <ToggleSwitch checked={false} onChange={toggleEmailNotifications} label="Email me about activity" disabled />
           </div>
         </div>
       </section>
