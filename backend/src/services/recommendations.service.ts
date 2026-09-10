@@ -112,7 +112,20 @@ export async function getRecommendations(uid: string): Promise<{ items: Recommen
     filtered = filtered.filter((d) => ((d.data().genres as string[] | undefined) ?? []).some((g) => preferredGenres.includes(g)));
   }
 
-  const items = filtered.slice(0, RESULT_LIMIT).map((d) => toSummary(d.id, d.data(), preferredGenres));
+  // Real bug: candidates come back from Firestore ordered by voteAverage, and
+  // this used to just slice that order to RESULT_LIMIT — matchScore was
+  // computed per item for the badge but never fed back into ranking, so a
+  // highly-rated movie with weak genre overlap could outrank a lower-rated
+  // one that actually matched better. Compute scores for the whole
+  // (already language/genre-filtered) candidate pool first, then rank by
+  // that. When there's no preference signal at all (preferredGenres is
+  // empty), every score is null and this sort is a no-op — ties resolve via
+  // Array.sort's stability, leaving the original voteAverage-desc order
+  // intact for that trending-fallback case.
+  const items = filtered
+    .map((d) => toSummary(d.id, d.data(), preferredGenres))
+    .sort((a, b) => (b.matchScore ?? -1) - (a.matchScore ?? -1))
+    .slice(0, RESULT_LIMIT);
 
   return { items };
 }
