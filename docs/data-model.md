@@ -1,4 +1,4 @@
-# BINJ — Conceptual Data Model (Working Notes)
+# ZATLAN — Conceptual Data Model (Working Notes)
 
 Follows [hld.md](hld.md) (which flows exist and why) and precedes concrete schema/API contract design. This doc captures **entities, their key attributes, and relationships/cardinality** — deliberately still storage-agnostic in spirit, even though Firestore paths already leaked into the HLD (that's fine; this pass makes the *relationships* explicit rather than implicit in a path string).
 
@@ -10,7 +10,7 @@ Follows [hld.md](hld.md) (which flows exist and why) and precedes concrete schem
 - **User** — the account. Profile, privacy settings, moderation status, role (custom claim, not stored data).
 
 **Catalog**
-- **Movie** — the BINJ movie-catalog record (TMDB-sourced).
+- **Movie** — the ZATLAN movie-catalog record (TMDB-sourced).
 
 **Social graph**
 - **Follow** — A follows B (one-directional).
@@ -77,8 +77,8 @@ Key attributes, grounded in decisions already made across the HLD:
 | `followRequiresApproval` | §4, §13 | Default off |
 | `status` | §14b | `active` \| `restricted` \| `suspended` (+ expiry if temporary) |
 | `notificationPrefs.emailEnabled` | §17 | Per-user opt-out |
-| `themePreference` | UI direction | `"dark"` \| `"light"` \| `"system"`, default `"dark"` — BINJ ships dark-mode-first; user can switch to light or follow the OS setting |
-| `accentTheme` | UI direction | `"emerald"` \| `"cyan"` \| `"purple"` \| `"pink"` \| `"amber"` \| `"red"`, default `"emerald"` — the accent color used on the primary CTA, the BINJ rating, and a small set of other deliberately-chosen elements (never applied broadly). TMDB's rating stays a fixed neutral white regardless of the chosen accent, so the two ratings never collide |
+| `themePreference` | UI direction | `"dark"` \| `"light"` \| `"system"`, default `"dark"` — ZATLAN ships dark-mode-first; user can switch to light or follow the OS setting |
+| `accentTheme` | UI direction | `"emerald"` \| `"cyan"` \| `"purple"` \| `"pink"` \| `"amber"` \| `"red"`, default `"emerald"` — the accent color used on the primary CTA, the ZATLAN rating, and a small set of other deliberately-chosen elements (never applied broadly). TMDB's rating stays a fixed neutral white regardless of the chosen accent, so the two ratings never collide |
 | `favoriteGenres` | §13 | Resolved — yes, a stored attribute (not a relationship): optional onboarding step, feeds §6's cold-start recommendations |
 | `preferredLanguages` | §13 | Optional onboarding step, added alongside `favoriteGenres` — ISO 639-1 codes for which regional/language cinema the user watches (e.g. Tamil, Korean, English), not a dubbing preference. Same shape and same consumer (recommendations, onboarding's Watched-step candidate filtering) as `favoriteGenres` |
 | `onboardingComplete` | §13 | Default `false`. Distinct from any single onboarding step's own optionality — genres/languages/watched/celebrities can all be individually skipped, but the wizard as a whole still needs a durable "done" signal so a returning user isn't shown it again. Also doubles as the frontend's "should I launch onboarding at all" check, alongside the bootstrap call's one-time `isNewUser` flag (api-contracts.md §11) — the flag catches "just signed up," this field catches "signed up before but never finished" |
@@ -91,10 +91,10 @@ Key attributes, grounded in decisions already made across the HLD:
 | `movieId` | §2 | TMDB-sourced ID (or wraps `tmdb_id`?) |
 | `title`, `year`, `runtime`, `genres[]` | §2, §6 | `genres` stored as a real array (TMDB gives this natively, unlike raw IMDb) |
 | `synopsis`, `poster`, `cast/crew` | §2 | Full detail, fetched lazily on first view. Cast/crew entries carry `personId` (TMDB's person id) — a stable FK into the `Person` entity below, not just a display name |
-| `originalLanguage` | §13 | TMDB's `original_language`, ISO 639-1 — the source of truth both onboarding's language-preference step and its Watched-step candidate filtering key off, rather than inventing a separate BINJ-owned language taxonomy |
+| `originalLanguage` | §13 | TMDB's `original_language`, ISO 639-1 — the source of truth both onboarding's language-preference step and its Watched-step candidate filtering key off, rather than inventing a separate ZATLAN-owned language taxonomy |
 | `voteAverage`, `voteCount` (TMDB rating) | §2 | Replaces "IMDb rating" entirely as of §2's correction; vote count shown alongside the rating for credibility |
 | `trailerKey` | §2 | YouTube video id for the official trailer, from TMDB's `videos` endpoint; `null` if TMDB has none |
-| `binjRating.sum`, `binjRating.count` | §20 | BINJ's own aggregate, maintained transactionally |
+| `zatlanRating.sum`, `zatlanRating.count` | §20 | ZATLAN's own aggregate, maintained transactionally |
 | `streamingProviders`, `streamingLastFetched` | §8 | Own refresh cycle, shorter TTL than the rest of the doc |
 | `isAdult` | imdb-data-analysis.md §2, HLD §5a | Carried over from TMDB/IMDb; floated in §5a as a possible future default for auto-private watched entries |
 | `lastFetched` (full-detail) | §2 | Cache/staleness marker for the general record |
@@ -127,7 +127,7 @@ Five entities, each connecting exactly one `User` to exactly one `Movie`, but wi
 
 **Decision — `Review`, `ReviewBan`, and `LikeEntry` are keyed the same deterministic way** (`{userId}+{movieId}` as the doc path, not a random ID) — this is what makes "one review per user per movie," "at most one active ban per user per movie," and "like is a toggle, not a counter" *structural* guarantees rather than application-level checks (§20's reasoning, reused for §22 and now for likes). `WatchlistEntry`/`WatchedEntry` don't need this since they're not capped at one — a user can have many.
 
-**`LikeEntry` mirrors `Review`'s aggregate pattern, simplified.** `Movie.likeCount` is maintained the same transactional way as `binjRating` (§20) — but since a like has no *value* to average, only existence, the transaction is just "does `users/{uid}/likes/{movieId}` already exist? If not, create it and `likeCount += 1`; on unlike, delete it and `likeCount -= 1`" — no delta computation needed, since there's nothing to edit, only toggle on/off.
+**`LikeEntry` mirrors `Review`'s aggregate pattern, simplified.** `Movie.likeCount` is maintained the same transactional way as `zatlanRating` (§20) — but since a like has no *value* to average, only existence, the transaction is just "does `users/{uid}/likes/{movieId}` already exist? If not, create it and `likeCount += 1`; on unlike, delete it and `likeCount -= 1`" — no delta computation needed, since there's nothing to edit, only toggle on/off.
 
 **Worth naming explicitly:** `Review.modRemovalCount` means `Review` and `ReviewBan` aren't independent — a `Review`'s strike count is what *produces* a `ReviewBan` once it hits 3 (§22). That's a real relationship (one `Review`'s history can create one `ReviewBan`), not just two entities that happen to share a key shape.
 

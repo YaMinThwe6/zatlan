@@ -78,10 +78,10 @@ export interface MovieDetail extends MovieSummary {
   // ever render the small poster.
   backdrop: string | null
   streamingProviders: StreamingProvider[]
-  // BINJ's own aggregate rating (hld.md §20) and like count — always present in
+  // ZATLAN's own aggregate rating (hld.md §20) and like count — always present in
   // the response, defaulting to zero when absent from storage (a movie that's
   // never been rated/liked yet has no reason to have written these fields).
-  binjRating: { sum: number; count: number }
+  zatlanRating: { sum: number; count: number }
   likeCount: number
 }
 

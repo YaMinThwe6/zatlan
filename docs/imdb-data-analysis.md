@@ -1,6 +1,6 @@
 # IMDb Data Analysis (Milestone 1)
 
-Analysis of the IMDb dataset available via `bigquery-public-data.imdb`, based on `data/imdb_schema.json` and the sample JSON pulls in `data/`. See [README.md](../README.md) for the full BINJ feature list and tech stack, and [docs/hld.md](hld.md) for how this IMDb/BigQuery foundation relates to BINJ's own Firestore-backed application data.
+Analysis of the IMDb dataset available via `bigquery-public-data.imdb`, based on `data/imdb_schema.json` and the sample JSON pulls in `data/`. See [README.md](../README.md) for the full ZATLAN feature list and tech stack, and [docs/hld.md](hld.md) for how this IMDb/BigQuery foundation relates to ZATLAN's own Firestore-backed application data.
 
 **Caveat on method:** this analysis was done from small sample files (10–50 rows per table), not live BigQuery queries — no `bq`/`gcloud` access was available. Structural findings (which columns exist, what a populated row looks like) are reliable. Null-rate/coverage claims are *observations from samples only* and are flagged as such below; they should be confirmed with real aggregate queries before being treated as fact. Suggested queries are included per table so this can be closed out directly in BigQuery.
 
@@ -26,7 +26,7 @@ Analysis of the IMDb dataset available via `bigquery-public-data.imdb`, based on
 - IDs join as expected: `title_basics.tconst` ↔ `title_ratings.tconst` ↔ `title_crew.tconst` ↔ `title_principals.tconst` ↔ `title_episode.tconst`/`parent_tconst`; `title_principals.nconst` ↔ `name_basics.nconst`.
 - `genres`, `directors`, `writers`, and `known_for_titles` are comma-separated **strings**, not repeated/array fields — need `SPLIT()` in SQL or app-side parsing to treat as multi-valued.
 - `reviews.review_embedded` is the one true `ARRAY<FLOAT64>` column — a precomputed text embedding per review, usable directly for vector similarity.
-- The `reviews` table does **not** match the standard public IMDb schema (title/crew/principals/ratings/akas/episode). It looks like a separate sentiment-analysis dataset (free-text review + `split` train/test + `label` Positive/Negative + `reviewer_rating` + embedding) joined in for this project, not the official BigQuery IMDb reviews. Critically, **it has no reviewer identity field** — no user id, no reviewer name. It's usable as flavor text or as embedding input for content-based similarity, but must not be presented as reviews written by real/attributable people, since BINJ's model is identity-linked social reviews living in Firestore.
+- The `reviews` table does **not** match the standard public IMDb schema (title/crew/principals/ratings/akas/episode). It looks like a separate sentiment-analysis dataset (free-text review + `split` train/test + `label` Positive/Negative + `reviewer_rating` + embedding) joined in for this project, not the official BigQuery IMDb reviews. Critically, **it has no reviewer identity field** — no user id, no reviewer name. It's usable as flavor text or as embedding input for content-based similarity, but must not be presented as reviews written by real/attributable people, since ZATLAN's model is identity-linked social reviews living in Firestore.
 - `title_basics_start_year_desc.json` is sorted by `start_year DESC`, so the sample is dominated by unreleased/announced titles (e.g. *Avatar 5*, *Coco 2*, entries dated 2029–2115). Those rows are naturally missing `runtime_minutes`, ratings, and reviews — this is a sampling artifact, not evidence that released titles lack this data.
 
 ### Sample-based null observations (unverified at scale — see suggested queries)
@@ -51,8 +51,8 @@ If these turn out to be genuinely sparse dataset-wide (not just sample bias), fa
 | Genre selection | Yes | `title_basics.genres` (comma-separated, needs parsing) |
 | Language / Region selection | Column exists, coverage unverified | `title_akas.language`, `.region` — see null-rate caveat above |
 | Cast & crew, character names | Yes | `title_principals` (category, characters), `title_crew` (directors; writers sparse in sample), `name_basics` (person details) |
-| Likes, Reviews, Watched list, Watchlist | No — by design | Entirely BINJ-generated, lives in Firestore — see [docs/hld.md](hld.md)'s data strategy |
-| Personalized recommendations (content-based) | Partial | Genre/cast/crew/rating signals from `title_basics`/`title_principals`/`title_ratings`; `reviews.review_embedded` vectors usable for content-similarity, but not tied to BINJ users |
+| Likes, Reviews, Watched list, Watchlist | No — by design | Entirely ZATLAN-generated, lives in Firestore — see [docs/hld.md](hld.md)'s data strategy |
+| Personalized recommendations (content-based) | Partial | Genre/cast/crew/rating signals from `title_basics`/`title_principals`/`title_ratings`; `reviews.review_embedded` vectors usable for content-similarity, but not tied to ZATLAN users |
 | Streaming Availability | **No** | No table in this schema has platform/provider data — see §3 |
 | User Profiles, Privacy prefs | No — by design | Firestore |
 | People Discovery (who watched a movie, similar tastes) | No — by design | `name_basics`/`title_principals` only describe cast/crew, not viewers; this feature is 100% Firestore social-graph data |
@@ -61,7 +61,7 @@ If these turn out to be genuinely sparse dataset-wide (not just sample bias), fa
 | Location-Based Discovery | No — by design | Firestore + Google Maps, no IMDb geo data exists |
 | Forums / Communities | No — by design | Firestore |
 
-"No — by design" rows are not gaps: the README's own Data Strategy section already scopes these as BINJ-generated application data, and the sample data confirms there's nothing in IMDb that could substitute for them anyway.
+"No — by design" rows are not gaps: the README's own Data Strategy section already scopes these as ZATLAN-generated application data, and the sample data confirms there's nothing in IMDb that could substitute for them anyway.
 
 ---
 
@@ -72,7 +72,7 @@ If these turn out to be genuinely sparse dataset-wide (not just sample bias), fa
 3. **Region/language coverage unverified at scale** (`title_akas`) — see §1 table and suggested query. Needed before committing to "Region/Language selection" as an MVP feature.
 4. **`name_basics.primary_profession` coverage unverified at scale** — see §1. Fallback: `title_principals.category`.
 5. **`title_crew.writers` coverage unverified at scale** — sample shows entirely absent even where directors are present.
-6. **No BINJ-attributable reviewer identity in the `reviews` table** — usable for content-based signals (embeddings) or flavor text only, not as a stand-in for real user reviews.
+6. **No ZATLAN-attributable reviewer identity in the `reviews` table** — usable for content-based signals (embeddings) or flavor text only, not as a stand-in for real user reviews.
 
 ### Next step
 

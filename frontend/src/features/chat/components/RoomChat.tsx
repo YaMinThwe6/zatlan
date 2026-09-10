@@ -28,7 +28,7 @@ export function RoomChat() {
   // segment is always present in practice — the assertion just tells
   // TypeScript what the route already guarantees. currentUid comes straight
   // from the Firebase Auth user rather than a passed prop — its uid is the
-  // same id BINJ's own profile is keyed by (hld.md §13).
+  // same id ZATLAN's own profile is keyed by (hld.md §13).
   const { roomId: roomIdParam } = useParams<{ roomId: string }>()
   const roomId = roomIdParam!
   const navigate = useNavigate()

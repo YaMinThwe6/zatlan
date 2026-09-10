@@ -1,4 +1,4 @@
-# BINJ — Frontend Conventions
+# ZATLAN — Frontend Conventions
 
 Written 2026-08-29, alongside [backend-conventions.md](backend-conventions.md) — same motivation: the frontend grew feature-by-feature (`onboarding/`, `home/`, then `MovieDetail.tsx`/`MovieSearch.tsx` loose in `src/`) without ever naming a target shape, worth doing deliberately now rather than letting the next feature improvise its own.
 
@@ -60,7 +60,7 @@ A feature's `index.ts` is its public API surface (re-exporting only what other f
 
 `apiFetch()` itself (the shared fetch wrapper: auth header injection, JSON body) stays in `lib/api.ts` — it's genuinely cross-cutting, every service file imports it, no feature owns it. It was also updated in the same pass to parse the new backend envelope (docs/backend-conventions.md §3): unwraps `data` on success, throws `responseBody.message` on failure — replacing the old `responseBody?.error?.message` shape.
 
-Type re-exports (`export type { ... } from '@binj/shared-types'`) moved to whichever service file each type actually belongs to, rather than one shared block. `Me` (the app's name for `UserProfile`) stayed in `lib/api.ts` alongside `getMe`/`updateMe`.
+Type re-exports (`export type { ... } from '@zatlan/shared-types'`) moved to whichever service file each type actually belongs to, rather than one shared block. `Me` (the app's name for `UserProfile`) stayed in `lib/api.ts` alongside `getMe`/`updateMe`.
 
 ---
 

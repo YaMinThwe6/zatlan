@@ -8,7 +8,7 @@
 // hld.md §5b. Swap in the real cron + BigQuery pipeline once there's enough
 // users to matter; this script implements the same algorithm either way.
 //
-// Run manually for now: pnpm --filter binj-backend exec tsx scripts/computeTasteMatches.ts
+// Run manually for now: pnpm --filter zatlan-backend exec tsx scripts/computeTasteMatches.ts
 
 import { initializeApp, cert } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";

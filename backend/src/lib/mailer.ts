@@ -23,10 +23,10 @@ export async function sendOtpEmail(to: string, code: string): Promise<void> {
   }
 
   await transporter.sendMail({
-    from: `BINJ <${env.SMTP_USER}>`,
+    from: `ZATLAN <${env.SMTP_USER}>`,
     to,
-    subject: `${code} is your BINJ verification code`,
-    text: `Your BINJ verification code is ${code}. It expires in 10 minutes.`,
-    html: `<p>Your BINJ verification code is <strong style="font-size:20px; letter-spacing:2px;">${code}</strong>.</p><p>It expires in 10 minutes. If you didn't request this, you can ignore this email.</p>`
+    subject: `${code} is your ZATLAN verification code`,
+    text: `Your ZATLAN verification code is ${code}. It expires in 10 minutes.`,
+    html: `<p>Your ZATLAN verification code is <strong style="font-size:20px; letter-spacing:2px;">${code}</strong>.</p><p>It expires in 10 minutes. If you didn't request this, you can ignore this email.</p>`
   });
 }

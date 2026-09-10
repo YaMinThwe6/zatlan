@@ -1,4 +1,4 @@
-import type { MovieStatus, MovieStatusLite, MyWatchlistEntry, MyWatchedEntry } from "@binj/shared-types";
+import type { MovieStatus, MovieStatusLite, MyWatchlistEntry, MyWatchedEntry } from "@zatlan/shared-types";
 import { requireDb } from "../lib/firebaseAdmin.js";
 import { AppError } from "../utils/AppError.js";
 

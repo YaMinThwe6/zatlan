@@ -103,7 +103,7 @@ export function MovieDetail() {
 
   // Separate from the initial-mount fetch below so submit/delete can refresh
   // just the rating aggregate without re-triggering the "Loading…" full-page
-  // state — the movie's own binjRating changes every time a review is posted
+  // state — the movie's own zatlanRating changes every time a review is posted
   // or removed, so it can't just be fetched once on mount.
   function loadMovie() {
     return getMovie(movieId)
@@ -191,7 +191,7 @@ export function MovieDetail() {
     )
   }
 
-  const binjAverage = movie.binjRating.count > 0 ? (movie.binjRating.sum / movie.binjRating.count).toFixed(1) : null
+  const zatlanAverage = movie.zatlanRating.count > 0 ? (movie.zatlanRating.sum / movie.zatlanRating.count).toFixed(1) : null
   const poster = posterUrl(movie.poster, 'w500')
   const backdrop = backdropUrl(movie.backdrop, 'w1280')
 
@@ -309,13 +309,13 @@ export function MovieDetail() {
                 </span>
                 <span className="hidden text-[11px] font-normal text-text-muted lg:block">TMDB rating</span>
               </span>
-              {binjAverage ? (
+              {zatlanAverage ? (
                 <span className="flex items-center gap-1 text-accent lg:flex-col lg:items-start lg:gap-0">
                   <span className="flex items-center gap-1">
                     <StarIcon filled className="text-[#FFC107]" />
-                    <span className="lg:text-xl">{binjAverage}</span>
+                    <span className="lg:text-xl">{zatlanAverage}</span>
                   </span>
-                  <span className="hidden text-[11px] font-normal text-text-muted lg:block">BINJ rating</span>
+                  <span className="hidden text-[11px] font-normal text-text-muted lg:block">ZATLAN rating</span>
                 </span>
               ) : (
                 <span className="text-[11.5px] font-semibold text-text-muted">No ratings yet</span>

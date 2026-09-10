@@ -89,6 +89,12 @@ describe('MovieSearch — signed-in usage (via Home)', () => {
     expect(await screen.findByText('Home page')).toBeInTheDocument()
   })
 
+  it('teases that series and books are coming', () => {
+    renderWithRouter()
+    expect(screen.getByText(/series and books/i)).toBeInTheDocument()
+    expect(screen.getByText(/for now, discovery is all about movies/i)).toBeInTheDocument()
+  })
+
   it('badges a result the caller has watched / watchlisted', async () => {
     searchMovies.mockResolvedValue({
       items: [
@@ -175,10 +181,10 @@ describe('MovieSearch — browse by genre / language chip', () => {
 })
 
 describe('MovieSearch — guest usage (public Discover)', () => {
-  it('shows the BINJ brand and a Get Started button instead of a back button', () => {
+  it('shows the ZATLAN brand and a Get Started button instead of a back button', () => {
     authUser = null
     renderWithRouter('/')
-    expect(screen.getByText('BINJ')).toBeInTheDocument()
+    expect(screen.getByText('ZATLAN')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /^get started$/i })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /← home/i })).not.toBeInTheDocument()
   })

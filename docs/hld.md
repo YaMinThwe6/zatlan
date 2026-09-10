@@ -1,4 +1,4 @@
-# BINJ — High-Level Design (Working Notes)
+# ZATLAN — High-Level Design (Working Notes)
 
 Living document from the HLD walkthrough. Captures components, traced request flows, decisions made, and things still open. See [PRD.md](PRD.md) for product scope, [imdb-data-analysis.md](imdb-data-analysis.md) for the IMDb dataset analysis, and [backend-conventions.md](backend-conventions.md) / [frontend-conventions.md](frontend-conventions.md) for tooling/logging/folder-structure/response-envelope conventions (separate from *what* the app does, which lives here).
 
@@ -36,9 +36,9 @@ User → Frontend → Backend → Cache
 ```
 
 **Decisions:**
-- Movie catalog ("BINJ Movie DB") lives in Firestore, same database as everything else — no reason yet to split it out.
+- Movie catalog ("ZATLAN Movie DB") lives in Firestore, same database as everything else — no reason yet to split it out.
 - Frontend never calls TMDB directly; credentials stay backend-only.
-- **BigQuery/IMDb dropped from this flow.** The IMDb rating in BigQuery is stale (the public dataset isn't kept current), and TMDB's API doesn't expose IMDb's actual rating (only an `imdb_id` for cross-referencing) — so "refresh IMDb rating from BigQuery" was never actually going to produce a fresher number, just a differently-stale one. **TMDB's own rating (`vote_average`) replaces "IMDb rating" as the third-party rating shown in the product.** This also means §16.3 of the PRD ("IMDb: 8.7/10 vs BINJ: 4.6/5") needs relabeling to "TMDB rating vs BINJ rating" — noted, not yet applied to PRD.md.
+- **BigQuery/IMDb dropped from this flow.** The IMDb rating in BigQuery is stale (the public dataset isn't kept current), and TMDB's API doesn't expose IMDb's actual rating (only an `imdb_id` for cross-referencing) — so "refresh IMDb rating from BigQuery" was never actually going to produce a fresher number, just a differently-stale one. **TMDB's own rating (`vote_average`) replaces "IMDb rating" as the third-party rating shown in the product.** This also means §16.3 of the PRD ("IMDb: 8.7/10 vs ZATLAN: 4.6/5") needs relabeling to "TMDB rating vs ZATLAN rating" — noted, not yet applied to PRD.md.
 - BigQuery is repurposed as an **analytics-only** system, fed by a separate (not yet designed) pipeline from Firestore — disconnected from this live flow.
 - **This flow is specifically "fetch full details for a movie the user already selected"** — not the same thing as *finding* that movie in the first place. Originally conflated with search; corrected in §18, which now owns discovery. This flow triggers only once a specific movie is opened (from a search result, a recommendation, etc.), and is where the full TMDB detail fetch + IMDb-rating-at-ingestion-time actually happens.
 
@@ -117,7 +117,7 @@ Split into two sub-features with different shapes.
 ```
 User views movie page
         ↓
-Backend fetches the caller's `following` list (bounded — who this user follows, not all BINJ users)
+Backend fetches the caller's `following` list (bounded — who this user follows, not all ZATLAN users)
         ↓
 For each followed user:
     - check users/{uid}/watched/{movieId} exists
@@ -131,7 +131,7 @@ Return: followed users who watched it AND both visibility checks pass
 
 **Decision — per-entry privacy override:** even when a user's watched list is public by default, individual entries can be marked private, hidden from everyone (including followers) and visible only to the owner. Modeled as `users/{uid}/watched/{movieId}.visibility: "public" | "private"`, checked in addition to the list-level toggle. Motivating case: a user watched something they don't want anyone to know about, even though their list is otherwise public. Possible future nicety (not required now): default this to private automatically for titles flagged `is_adult` in the movie catalog, reducing manual toggling.
 
-**Why this shape, not a collection-group query or a reverse index on the movie:** both of those return everyone globally who watched the movie, which then has to be filtered down to "is this person someone I follow" — wasteful when a user follows a handful of people out of a much larger user base. Instead, the backend **fans out from the caller's own (bounded) `following` list** and checks each one directly. This scales with "how many people you follow," not "how many users BINJ has."
+**Why this shape, not a collection-group query or a reverse index on the movie:** both of those return everyone globally who watched the movie, which then has to be filtered down to "is this person someone I follow" — wasteful when a user follows a handful of people out of a much larger user base. Instead, the backend **fans out from the caller's own (bounded) `following` list** and checks each one directly. This scales with "how many people you follow," not "how many users ZATLAN has."
 
 ### 5b. "People with similar movie taste"
 
@@ -152,7 +152,7 @@ Write "top N similar users" back into Firestore, per user
 
 **Decision (confirmed with PM):** similarity is based on **overlap of watched movies + shared genres**.
 
-**Implementation note (added once this was actually built):** the BigQuery hop is a scale optimization — at real BINJ scale (comparing many users pairwise) Firestore genuinely can't do that cheaply, which is why the design routes through BigQuery. But with a handful of test users during early development, that comparison is trivial directly against Firestore, and standing up actual Cloud Scheduler + a BigQuery export pipeline for zero practical benefit at this volume isn't worth the setup cost yet. `backend/scripts/computeTasteMatches.ts` implements the exact same algorithm (watched-movie overlap + shared genres) directly against Firestore, runnable on demand for now; the read side (`GET /users/me/tasteMatches` below) is unaffected either way since it only ever reads the precomputed `tasteMatches` subcollection, regardless of what wrote it. Swapping in the real cron + BigQuery pipeline once there's enough users to matter is an infrastructure change, not an algorithm or API change.
+**Implementation note (added once this was actually built):** the BigQuery hop is a scale optimization — at real ZATLAN scale (comparing many users pairwise) Firestore genuinely can't do that cheaply, which is why the design routes through BigQuery. But with a handful of test users during early development, that comparison is trivial directly against Firestore, and standing up actual Cloud Scheduler + a BigQuery export pipeline for zero practical benefit at this volume isn't worth the setup cost yet. `backend/scripts/computeTasteMatches.ts` implements the exact same algorithm (watched-movie overlap + shared genres) directly against Firestore, runnable on demand for now; the read side (`GET /users/me/tasteMatches` below) is unaffected either way since it only ever reads the precomputed `tasteMatches` subcollection, regardless of what wrote it. Swapping in the real cron + BigQuery pipeline once there's enough users to matter is an infrastructure change, not an algorithm or API change.
 
 ### 5c. Public profiles — where a person card in 5a/5b actually goes
 
@@ -326,15 +326,15 @@ Return matching events, sorted by distance
 
 - **Real Teleparty-style playback sync (play/pause/seek across streaming platforms) — Phase 2, explicitly out of scope for the Pachamama prototype.** Presence (§15) is the actual MVP scope; everything below is planning-only for a later phase.
 
-  **Confirmed no official API/SDK path exists** for a third-party consumer app — Netflix/Prime/etc. partner SDKs are for certified hardware/device manufacturers embedding the platform on their own devices, not for apps like BINJ. Not a pricing-tier problem; structurally unavailable regardless of paid-platform status.
+  **Confirmed no official API/SDK path exists** for a third-party consumer app — Netflix/Prime/etc. partner SDKs are for certified hardware/device manufacturers embedding the platform on their own devices, not for apps like ZATLAN. Not a pricing-tier problem; structurally unavailable regardless of paid-platform status.
 
-  **Confirmed mechanism (via direct observation of how Rave works):** an app-owned embedded browser engine — `WebView` on Android, `WebView2`/CEF on Windows, `WKWebView` on iOS — loads the streaming platform's *real* site, the user authenticates directly with the platform (confirmed via real Netflix OTP login), and the app injects synchronization logic into that same embedded player's DOM. This only works inside a native app; **BINJ's current React web app cannot do this** — a website can't embed and control another website's content the way an app-owned WebView can (cross-origin/iframe restrictions block it). This means Phase 2 isn't a feature addition, it's a second product: a native Android/Windows (and optionally iOS) app.
+  **Confirmed mechanism (via direct observation of how Rave works):** an app-owned embedded browser engine — `WebView` on Android, `WebView2`/CEF on Windows, `WKWebView` on iOS — loads the streaming platform's *real* site, the user authenticates directly with the platform (confirmed via real Netflix OTP login), and the app injects synchronization logic into that same embedded player's DOM. This only works inside a native app; **ZATLAN's current React web app cannot do this** — a website can't embed and control another website's content the way an app-owned WebView can (cross-origin/iframe restrictions block it). This means Phase 2 isn't a feature addition, it's a second product: a native Android/Windows (and optionally iOS) app.
 
   **Real blockers, independent of container (WebView vs. WebView2/CEF):**
   - DRM provisioning per platform (Widevine on Android/Windows, FairPlay on iOS — notably harder/less documented) — can cap quality or block playback entirely if misconfigured.
   - Per-platform player reverse-engineering, maintained indefinitely — every platform is a separate, fragile, undocumented integration that can silently break on any UI update.
   - Adversarial, not static — platforms actively invest in detecting/blocking this pattern; not a build-once investment.
-  - ToS violation, with real legal exposure (DRM-circumvention-adjacent, e.g. DMCA §1201-style anti-circumvention concerns depending on jurisdiction) — compounds if BINJ becomes a paid/commercial platform.
+  - ToS violation, with real legal exposure (DRM-circumvention-adjacent, e.g. DMCA §1201-style anti-circumvention concerns depending on jurisdiction) — compounds if ZATLAN becomes a paid/commercial platform.
   - Doesn't fit the Sep 7 Pachamama submission regardless of the above — comparable in scope to building a second product.
 
   **Possible scope reduction if pursued later:** Android + Windows only, drop iOS — removes the hardest DRM case (FairPlay/WKWebView) without solving the rest.
@@ -346,7 +346,7 @@ Return matching events, sorted by distance
 - **Gemini flows** — traced now: autonomous content moderation, §14/§30.8. (Google Maps is now traced for map rendering — nearby-events pins, §9's implementation note — but address geocoding at event-creation time is still open, same note.)
 - **Event notifications** (e.g. host notified of a new join request) — surfaced in §7, not yet designed.
 - **Passkey (WebAuthn) sign-in** — future addition alongside OAuth (§13). Firebase Auth has no native passkey provider yet; adding this later means either a third-party Firebase Extension or a custom WebAuthn ceremony + Admin SDK custom-token minting. Not designed in detail — revisit once core product is stable.
-- **Anonymous reviews/ratings — decided.** Opt-in **per review/rating** (a per-submission user choice, not a global account-wide setting). When chosen: the author's display name is hidden **consistently on every surface where that specific review/rating renders** (movie page, search, even the poster's own profile reviews list) — not selectively shown in one place and revealed in another. The backend still stores the real `authorId` for moderation/repeat-offender detection (PRD §30's enforcement ladder still works). The rating still contributes normally to the movie's aggregate BINJ score — anonymity hides *who* posted it, not the rating itself. Scoped deliberately to **not** reach into §5a's "people who watched this movie" — that's governed by the separate watched-list privacy settings, since "I watched this" and "here's my anonymous opinion" are different disclosures; a user wanting both hidden uses both mechanisms (they're independent, composable). Not yet traced as its own flow — the "submit rating/review" flow itself (of which anonymity is now one property) is still a candidate for a future walkthrough session.
+- **Anonymous reviews/ratings — decided.** Opt-in **per review/rating** (a per-submission user choice, not a global account-wide setting). When chosen: the author's display name is hidden **consistently on every surface where that specific review/rating renders** (movie page, search, even the poster's own profile reviews list) — not selectively shown in one place and revealed in another. The backend still stores the real `authorId` for moderation/repeat-offender detection (PRD §30's enforcement ladder still works). The rating still contributes normally to the movie's aggregate ZATLAN score — anonymity hides *who* posted it, not the rating itself. Scoped deliberately to **not** reach into §5a's "people who watched this movie" — that's governed by the separate watched-list privacy settings, since "I watched this" and "here's my anonymous opinion" are different disclosures; a user wanting both hidden uses both mechanisms (they're independent, composable). Not yet traced as its own flow — the "submit rating/review" flow itself (of which anonymity is now one property) is still a candidate for a future walkthrough session.
 
 ---
 
@@ -404,13 +404,13 @@ Frontend shows onboarding whenever isNewUser OR !onboardingComplete (catches bot
       /users/me { onboardingComplete: true } → done
 ```
 
-**Decision — passwordless, three sign-in paths: Google, Microsoft, Email+OTP; passkey still deferred.** BINJ never collects or stores a password. Google and Microsoft OAuth both use Firebase Auth's built-in providers (Microsoft via its OIDC/Azure AD provider) — zero extra backend work, same as the original Google-only decision. **Email + OTP is a genuine new integration, not a config toggle** — Firebase Auth's own passwordless option is "email link" (click a link in your inbox), not a typed numeric code, so a typed-OTP flow needs custom backend logic: generate the code, store a hash + expiry (not the raw code), email it via the existing Trigger-Email pattern (§17), verify server-side, then mint a Firebase custom token via the Admin SDK to hand the client a normal Firebase session. Still genuinely passwordless — no password is ever collected or stored, only a short-lived one-time code — so this doesn't reopen the passwordless decision, it just adds a third path to it. Apple Sign-In was considered and explicitly deferred in favor of Microsoft. Passkeys (WebAuthn) remain deferred — **Firebase Auth has no native passkey provider** as of mid-2026, so adding one means either a third-party Firebase Extension layering the WebAuthn ceremony on top, or a fully custom implementation (run the WebAuthn ceremony ourselves, verify it, mint a custom token the same way the OTP path does). Parked as P2 (§11).
+**Decision — passwordless, three sign-in paths: Google, Microsoft, Email+OTP; passkey still deferred.** ZATLAN never collects or stores a password. Google and Microsoft OAuth both use Firebase Auth's built-in providers (Microsoft via its OIDC/Azure AD provider) — zero extra backend work, same as the original Google-only decision. **Email + OTP is a genuine new integration, not a config toggle** — Firebase Auth's own passwordless option is "email link" (click a link in your inbox), not a typed numeric code, so a typed-OTP flow needs custom backend logic: generate the code, store a hash + expiry (not the raw code), email it via the existing Trigger-Email pattern (§17), verify server-side, then mint a Firebase custom token via the Admin SDK to hand the client a normal Firebase session. Still genuinely passwordless — no password is ever collected or stored, only a short-lived one-time code — so this doesn't reopen the passwordless decision, it just adds a third path to it. Apple Sign-In was considered and explicitly deferred in favor of Microsoft. Passkeys (WebAuthn) remain deferred — **Firebase Auth has no native passkey provider** as of mid-2026, so adding one means either a third-party Firebase Extension layering the WebAuthn ceremony on top, or a fully custom implementation (run the WebAuthn ceremony ourselves, verify it, mint a custom token the same way the OTP path does). Parked as P2 (§11).
 
 **Decision — Firebase Auth is frontend-safe, same pattern as Google Maps (§9).** The frontend SDK talks to Firebase Auth directly for sign-up/login — handling the OAuth handshake — none of that touches our backend. The backend's only job is verifying the resulting ID token on every subsequent request, consistent with the existing "never trust the frontend" principle (§10): verification still happens server-side every time, credential *collection* just isn't our backend's responsibility.
 
 **Decision — profile creation reuses the exact lazy-creation pattern from §2.** Rather than a separate Cloud Function triggered on Auth sign-up (a new component), the `users/{uid}` profile document gets created on the backend's first authenticated request after signup — same "create on first need" shape as movie ingestion in §2, just applied to users instead of movies. No new infrastructure needed.
 
-**Decision — revised optional-onboarding sequence (2026-08-27), replacing an earlier draft that ended on a Watchlist step.** The Watchlist step is dropped entirely — watchlist stays a real feature (§3), just not something onboarding collects; a brand-new user with an empty watchlist isn't a problem worth an onboarding step to solve, unlike watch *history*, which §6's recommendations genuinely need. In its place: a **preferred-languages** step (which regional/language cinema the user watches — Tamil, Korean, English, etc. — not a dubbing preference; keyed to TMDB's `original_language` per movie, §2, so it needs no BINJ-owned language taxonomy) and a **celebrities-to-follow** step, both chained off the same signal as the existing genres/watched steps:
+**Decision — revised optional-onboarding sequence (2026-08-27), replacing an earlier draft that ended on a Watchlist step.** The Watchlist step is dropped entirely — watchlist stays a real feature (§3), just not something onboarding collects; a brand-new user with an empty watchlist isn't a problem worth an onboarding step to solve, unlike watch *history*, which §6's recommendations genuinely need. In its place: a **preferred-languages** step (which regional/language cinema the user watches — Tamil, Korean, English, etc. — not a dubbing preference; keyed to TMDB's `original_language` per movie, §2, so it needs no ZATLAN-owned language taxonomy) and a **celebrities-to-follow** step, both chained off the same signal as the existing genres/watched steps:
 - **Genres → Languages → Watched:** the Watched step's candidate movie grid is filtered by the genres and languages just chosen (`GET /onboarding/watched-candidates`), rather than showing the same generic trending grid to everyone — someone who just said "Tamil, not really into Telugu" should see Tamil titles to mark as watched, not a wall of Hollywood blockbusters.
 - **Watched → Celebrities to follow:** once the user has marked some real movies watched, their cast/crew become suggested celebrities to follow (`GET /onboarding/celebrity-suggestions`) — a lighter-weight "follow" relationship (schema.md's `followedCelebrities`) than the full celebrity-page feature (still deferred, not designed here), but the relationship itself is real and gives that later feature a running start.
 - **Watched → first Home greeting:** the movies marked watched during onboarding also seed which quote gets picked for the very first Home greeting (§6's sibling feature, the movie-dialogue greeting) — a brand-new user's first Home visit is already personalized rather than a random pick from the full quote pool.
@@ -485,7 +485,7 @@ Practical consequences of this swap:
 ```
 Bootstrapping the very first admin(s)
         ↓
-Manual, out-of-band — a one-off script or Firebase Console action, run directly by the BINJ team
+Manual, out-of-band — a one-off script or Firebase Console action, run directly by the ZATLAN team
         ↓
 (not an in-app flow — cannot be, by construction: see decision below)
 
@@ -508,7 +508,7 @@ Return success
 
 ## 15. Flow: Watch Party — Presence ("who's live")
 
-Investigated first whether real Teleparty-style playback sync (play/pause/seek across everyone's own streaming platform) was achievable via official partnership, given BINJ may become a paid platform. **Resolved: not feasible, and not a money problem.** Netflix, Prime Video, and JioHotstar have no public API for third-party remote playback control — their partner SDKs exist for a different purpose (device manufacturers embedding the streaming app on hardware, not external apps controlling an existing session), DRM license terms actively restrict this kind of external control, and it works against their competitive incentives (none of them wants a cross-platform "watch party" layer sitting on top of their own experience). The strongest evidence: Teleparty, Scener, and Metastream — the actual companies doing this today — all rely on unofficial browser extensions rather than official APIs, at any funding level. If this is pursued later, the only proven path is the same one they use: **a browser extension, planned as its own separate future project**, not a phase of the current backend — noted in §11.
+Investigated first whether real Teleparty-style playback sync (play/pause/seek across everyone's own streaming platform) was achievable via official partnership, given ZATLAN may become a paid platform. **Resolved: not feasible, and not a money problem.** Netflix, Prime Video, and JioHotstar have no public API for third-party remote playback control — their partner SDKs exist for a different purpose (device manufacturers embedding the streaming app on hardware, not external apps controlling an existing session), DRM license terms actively restrict this kind of external control, and it works against their competitive incentives (none of them wants a cross-platform "watch party" layer sitting on top of their own experience). The strongest evidence: Teleparty, Scener, and Metastream — the actual companies doing this today — all rely on unofficial browser extensions rather than official APIs, at any funding level. If this is pursued later, the only proven path is the same one they use: **a browser extension, planned as its own separate future project**, not a phase of the current backend — noted in §11.
 
 For now, scope is **presence only** — no playback control, no synchronization, just live "who's currently here."
 
@@ -529,7 +529,7 @@ Other participants subscribe to presence/{eventId} in real-time
 UI shows "X people watching now"
 ```
 
-**Decision — Firebase Realtime Database, not Firestore, for presence.** Firestore has no built-in disconnect detection; RTDB's `onDisconnect()` is Firebase's own documented pattern specifically for this, even in apps (like BINJ) that use Firestore for everything else. Small, low-overhead addition to the same Firebase project — not a new vendor.
+**Decision — Firebase Realtime Database, not Firestore, for presence.** Firestore has no built-in disconnect detection; RTDB's `onDisconnect()` is Firebase's own documented pattern specifically for this, even in apps (like ZATLAN) that use Firestore for everything else. Small, low-overhead addition to the same Firebase project — not a new vendor.
 
 ---
 
@@ -537,7 +537,7 @@ UI shows "X people watching now"
 
 Resolves the "real-time layer for chat" question parked all the way back in §1/§11.
 
-**Decision — Firestore listeners (`onSnapshot`), not a WebSocket layer.** Firestore has a built-in subscription feature: the frontend subscribes directly to a document/collection, and Firestore itself pushes updates to every subscribed client automatically whenever the data changes — no polling, no custom server, nothing new to build or operate. A WebSocket layer would mean BINJ's own backend holding a persistent connection per client and manually relaying messages — real infrastructure, in exchange for control BINJ doesn't need here. Chat is the textbook case Firestore listeners were built for, so no new component is needed — just a Firestore capability not yet used elsewhere in this HLD.
+**Decision — Firestore listeners (`onSnapshot`), not a WebSocket layer.** Firestore has a built-in subscription feature: the frontend subscribes directly to a document/collection, and Firestore itself pushes updates to every subscribed client automatically whenever the data changes — no polling, no custom server, nothing new to build or operate. A WebSocket layer would mean ZATLAN's own backend holding a persistent connection per client and manually relaying messages — real infrastructure, in exchange for control ZATLAN doesn't need here. Chat is the textbook case Firestore listeners were built for, so no new component is needed — just a Firestore capability not yet used elsewhere in this HLD.
 
 **Revised decision — one room per Event, not per Movie, and ephemeral by default.** Superseded the original "shared room per movie" design. Modeled as its own entity, `Room`, distinct from `Event` (not folded into it) because a room can outlive the event that created it (see persistence, below) and later become associated with more than one event — a genuine one-to-many over time, not a fixed 1:1.
 
@@ -645,7 +645,7 @@ Delivery — three independent channels, in parallel:
 
 Corrects a gap surfaced during design: §2's on-demand ingestion only pulls a movie into Firestore once someone already knows about it and opens its page — but if search only looked at what's already in Firestore, nothing new could ever be *found* in the first place. That's circular, and it means even popular, obvious titles could trigger a live TMDB call during search simply because nobody had searched for them yet — not acceptable, since search must never depend on TMDB live.
 
-**Decision — search-index population is bulk/scheduled, fully decoupled from §2's per-user, per-movie detail ingestion.** A batch job (not triggered by any individual search) pulls a broad slice of TMDB's catalog and indexes it upfront and on a recurring schedule. Search then always hits BINJ's own pre-populated index — never TMDB, live, ever. §2 still exists, but now does only what it was always meant for: fetching the *full* detail record (synopsis, cast, streaming providers, IMDb rating at ingestion time) once a specific movie is actually opened — discoverability and full-detail-caching are two separate concerns, not one conflated flow.
+**Decision — search-index population is bulk/scheduled, fully decoupled from §2's per-user, per-movie detail ingestion.** A batch job (not triggered by any individual search) pulls a broad slice of TMDB's catalog and indexes it upfront and on a recurring schedule. Search then always hits ZATLAN's own pre-populated index — never TMDB, live, ever. §2 still exists, but now does only what it was always meant for: fetching the *full* detail record (synopsis, cast, streaming providers, IMDb rating at ingestion time) once a specific movie is actually opened — discoverability and full-detail-caching are two separate concerns, not one conflated flow.
 
 ```
 User types a search query
@@ -659,7 +659,7 @@ Return matching movies (title, poster, year — enough for a results list)
 User selects a result → triggers §2's detail-ingestion flow for that specific movie
 ```
 
-**Decision — Vertex AI Search (Media vertical) as the primary search index**, not Algolia/Typesense/Meilisearch. None of those three are Google products (Algolia: independent SaaS company; Typesense/Meilisearch: independent open-source projects/companies) — running on GCP infrastructure via a marketplace listing isn't the same as being a Google product. Vertex AI Search is a genuine Google Cloud product built for exactly this (fast, typo-tolerant search over your own data), with a Media vertical specifically aimed at content-catalog search. Given BINJ's Google-first mandate ("Google product unless no equivalent exists"), this is the correct first candidate — a Google equivalent exists, so reaching for a non-Google search service isn't justified.
+**Decision — Vertex AI Search (Media vertical) as the primary search index**, not Algolia/Typesense/Meilisearch. None of those three are Google products (Algolia: independent SaaS company; Typesense/Meilisearch: independent open-source projects/companies) — running on GCP infrastructure via a marketplace listing isn't the same as being a Google product. Vertex AI Search is a genuine Google Cloud product built for exactly this (fast, typo-tolerant search over your own data), with a Media vertical specifically aimed at content-catalog search. Given ZATLAN's Google-first mandate ("Google product unless no equivalent exists"), this is the correct first candidate — a Google equivalent exists, so reaching for a non-Google search service isn't justified.
 
 **Caveat, not yet verified:** exact current Vertex AI Search pricing (typically per query volume and/or data indexed; enterprise-tier search products have sometimes carried minimum commitments beyond simple pay-as-you-go) hasn't been confirmed. $300 in available GCP credit removes cost as a blocker for *testing* this, but should be treated as "enough to find out," not a guarantee it comfortably covers the whole prototype — worth checking the pricing calculator or provisioning a small test index before fully committing.
 
@@ -740,7 +740,7 @@ Backend verifies caller owns movies/{movieId}/reviews/{callerUid} — trivial, t
 Firestore transaction: read existing rating → sum -= rating, count -= 1 → soft-delete (§21)
 ```
 
-Anonymity (§11) is just one field on this same document, exactly as originally planned. The displayed BINJ average (§16.3 in the PRD) is always just `sum / count` — cheap to read regardless of review count.
+Anonymity (§11) is just one field on this same document, exactly as originally planned. The displayed ZATLAN average (§16.3 in the PRD) is always just `sum / count` — cheap to read regardless of review count.
 
 **Implementation note (added once this was actually built):** submit/edit/delete/list are real (`backend/src/routes/reviews.ts`). Resubmitting after a soft-delete is treated as first-time again (count increments), not an edit — a deleted review contributed nothing to the aggregate, so bringing it back is a fresh contribution. Anonymous reviews are redacted server-side in the public list (`authorId`/`displayName: null`) rather than left to the client, tightening the original api-contracts.md §3 sketch which said "withheld client-side." §22's moderation strikes/bans and disputes are deferred — they depend on the moderator-role system (§14), which doesn't exist yet; the account-restriction check this flow calls for above (§14b's `status` field) is real and already enforced, since that field already existed from onboarding.
 
@@ -783,7 +783,7 @@ Firestore transaction:
     - soft-delete the review (§21) — deleted: true
     - increment movies/{movieId}/reviews/{authorId}.modRemovalCount
     - reverse the review's contribution to the movie's aggregate rating (§20) — a removed
-      review shouldn't count toward the displayed BINJ average
+      review shouldn't count toward the displayed ZATLAN average
         ↓
 If modRemovalCount reaches 3 → write users/{authorId}/reviewBans/{movieId} = { bannedUntil: now + 30 days }
 ```

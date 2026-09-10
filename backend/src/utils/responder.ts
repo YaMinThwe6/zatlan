@@ -3,7 +3,7 @@ import type { Response } from "express";
 // Single response envelope for the whole API — docs/backend-conventions.md §3.
 // Adapted from the reference project's {success,message,data,statusCode}
 // shape with one addition: a machine-readable `code` on errors (the
-// reference pattern only carries a free-text `error` string) — BINJ's routes
+// reference pattern only carries a free-text `error` string) — ZATLAN's routes
 // already relied on codes like "MOVIE_NOT_FOUND"/"INVALID_RATING" for callers
 // to branch on, dropping them would be a real regression, not a simplification.
 export interface SuccessEnvelope<T> {

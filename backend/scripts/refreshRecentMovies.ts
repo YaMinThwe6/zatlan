@@ -12,7 +12,7 @@
 // traffic to justify standing it up — this script implements the exact
 // same write either way, so swapping the trigger later is infra, not logic.
 //
-// Run manually for now: pnpm --filter binj-backend run refresh-recent-movies
+// Run manually for now: pnpm --filter zatlan-backend run refresh-recent-movies
 
 import { requireDb } from "../src/lib/firebaseAdmin.js";
 import { getRecentMovies } from "../src/lib/tmdb.js";

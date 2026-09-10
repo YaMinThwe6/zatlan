@@ -1,8 +1,8 @@
 import { collection, onSnapshot, orderBy, query } from 'firebase/firestore'
 import { apiFetch } from '../../../lib/api'
 import { firestore } from '../../../lib/firebase'
-export type { RoomMessage, RoomDetail, RoomMember } from '@binj/shared-types'
-import type { RoomMessage, RoomDetail } from '@binj/shared-types'
+export type { RoomMessage, RoomDetail, RoomMember } from '@zatlan/shared-types'
+import type { RoomMessage, RoomDetail } from '@zatlan/shared-types'
 
 export function getRoom(roomId: string): Promise<RoomDetail> {
   return apiFetch(`/rooms/${encodeURIComponent(roomId)}`, { auth: true })

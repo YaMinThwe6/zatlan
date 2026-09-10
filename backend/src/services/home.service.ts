@@ -1,4 +1,4 @@
-import type { Greeting, ActivityItem, FriendsRecommendationItem } from "@binj/shared-types";
+import type { Greeting, ActivityItem, FriendsRecommendationItem } from "@zatlan/shared-types";
 import { requireDb } from "../lib/firebaseAdmin.js";
 import { pickQuoteForMovieIds, pickRandomQuote } from "../data/movieQuotes.js";
 

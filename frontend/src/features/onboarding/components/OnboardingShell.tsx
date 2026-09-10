@@ -83,11 +83,11 @@ export function OnboardingShell({ step, onBack, children, desktopTitle, desktopS
           }}
         />
         <div className="relative flex h-full flex-col justify-between p-12">
-          <span className="font-serif text-2xl font-bold text-accent">BINJ</span>
+          <span className="font-serif text-2xl font-bold text-accent">ZATLAN</span>
           <div>
             <div className="font-serif text-[32px] leading-tight font-semibold text-white">{desktopTitle ?? "Let's set up your profile."}</div>
             <p className="mt-3.5 max-w-[400px] text-sm leading-relaxed text-[#C9C5D1]">
-              {desktopSubtitle ?? 'A few quick steps and BINJ will know what to recommend.'}
+              {desktopSubtitle ?? 'A few quick steps and ZATLAN will know what to recommend.'}
             </p>
           </div>
         </div>

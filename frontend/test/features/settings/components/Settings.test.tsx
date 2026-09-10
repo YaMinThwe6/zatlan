@@ -76,7 +76,7 @@ describe('Settings', () => {
   it('renders the signed-in shell: Sidebar (Settings highlighted), AppHeader, MobileTabBar', async () => {
     renderSettings()
 
-    expect(screen.getByText('BINJ')).toBeInTheDocument() // Sidebar's own logo mark
+    expect(screen.getByText('ZATLAN')).toBeInTheDocument() // Sidebar's own logo mark
     // Settings supplies `me` directly to AppHeader (no independent fetch, see
     // AppHeader's own comment on that), and Sidebar has no self-fetch of its
     // own at all — so the signal this shell actually rendered is the

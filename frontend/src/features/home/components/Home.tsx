@@ -40,7 +40,7 @@ export function Home({ me, onSignOut }: Props) {
             every page reuses (logo lives in Sidebar there, not here), same
             split Settings.tsx/Profile.tsx/Notifications.tsx already use. */}
         <header className="flex items-center justify-between px-5 pt-4.5 lg:hidden">
-          <span className="font-serif text-[22px] font-bold text-accent">BINJ</span>
+          <span className="font-serif text-[22px] font-bold text-accent">ZATLAN</span>
 
           <div className="flex items-center gap-3.5">
             <button

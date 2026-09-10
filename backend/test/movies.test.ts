@@ -106,19 +106,19 @@ describe("GET /movies/:movieId", () => {
     expect(fetchMovieDetails).not.toHaveBeenCalled();
   });
 
-  it("always includes binjRating and likeCount, defaulting to zero when absent from storage", async () => {
+  it("always includes zatlanRating and likeCount, defaulting to zero when absent from storage", async () => {
     store.set("movies/27205", { title: "Inception (cached), never rated or liked", genres: ["Sci-Fi"] });
     const app = createApp();
     const res = await request(app).get("/movies/27205");
-    expect(res.body.data.binjRating).toEqual({ sum: 0, count: 0 });
+    expect(res.body.data.zatlanRating).toEqual({ sum: 0, count: 0 });
     expect(res.body.data.likeCount).toBe(0);
   });
 
-  it("preserves real binjRating and likeCount when they're already stored", async () => {
-    store.set("movies/27205", { title: "Inception (rated)", genres: ["Sci-Fi"], binjRating: { sum: 12, count: 3 }, likeCount: 7 });
+  it("preserves real zatlanRating and likeCount when they're already stored", async () => {
+    store.set("movies/27205", { title: "Inception (rated)", genres: ["Sci-Fi"], zatlanRating: { sum: 12, count: 3 }, likeCount: 7 });
     const app = createApp();
     const res = await request(app).get("/movies/27205");
-    expect(res.body.data.binjRating).toEqual({ sum: 12, count: 3 });
+    expect(res.body.data.zatlanRating).toEqual({ sum: 12, count: 3 });
     expect(res.body.data.likeCount).toBe(7);
   });
 
@@ -154,7 +154,7 @@ describe("GET /movies/:movieId", () => {
   });
 
   it("preserves an existing rating aggregate on a lightweight doc when backfilling its detail", async () => {
-    store.set("movies/27205", { title: "Inception", binjRating: { sum: 9, count: 2 }, likeCount: 4 });
+    store.set("movies/27205", { title: "Inception", zatlanRating: { sum: 9, count: 2 }, likeCount: 4 });
     fetchMovieDetails.mockResolvedValueOnce({
       movieId: "27205",
       title: "Inception",
@@ -168,7 +168,7 @@ describe("GET /movies/:movieId", () => {
     const app = createApp();
     const res = await request(app).get("/movies/27205");
 
-    expect(res.body.data.binjRating).toEqual({ sum: 9, count: 2 });
+    expect(res.body.data.zatlanRating).toEqual({ sum: 9, count: 2 });
     expect(res.body.data.likeCount).toBe(4);
   });
 
@@ -191,7 +191,7 @@ describe("GET /movies/:movieId", () => {
     expect(res.status).toBe(200);
     expect(res.body.data.credits).toBeUndefined();
     expect(res.body.data.title).toBe("Inception");
-    expect(res.body.data.binjRating).toEqual({ sum: 0, count: 0 });
+    expect(res.body.data.zatlanRating).toEqual({ sum: 0, count: 0 });
     expect(res.body.data.likeCount).toBe(0);
 
     const movieDoc = store.get("movies/27205") as { credits?: unknown; title: string; titleSearchTerms?: string[] };

@@ -1,4 +1,4 @@
-import type { MovieDetail, MovieSummary } from "@binj/shared-types";
+import type { MovieDetail, MovieSummary } from "@zatlan/shared-types";
 import { db } from "../lib/firebaseAdmin.js";
 import {
   fetchMovieDetails,
@@ -11,13 +11,13 @@ import { buildSearchTerms, significantWords } from "../lib/searchIndex.js";
 import { rankCandidate } from "../lib/searchRanking.js";
 import { AppError } from "../utils/AppError.js";
 
-// A movie that's never been rated/liked has no reason to have binjRating/likeCount
+// A movie that's never been rated/liked has no reason to have zatlanRating/likeCount
 // actually written in Firestore — this normalizes the response so the client never
 // has to special-case "field is missing" vs. "field is zero".
 function withRatingDefaults(data: FirebaseFirestore.DocumentData): MovieDetail {
   return {
     ...data,
-    binjRating: data.binjRating ?? { sum: 0, count: 0 },
+    zatlanRating: data.zatlanRating ?? { sum: 0, count: 0 },
     likeCount: data.likeCount ?? 0
   } as MovieDetail;
 }
@@ -51,7 +51,7 @@ export async function getMovieDetail(movieId: string): Promise<MovieDetail> {
     // rather than resetting it — backfilling detail shouldn't erase real data.
     const toStore = {
       ...movieDoc,
-      binjRating: existingData?.binjRating ?? { sum: 0, count: 0 },
+      zatlanRating: existingData?.zatlanRating ?? { sum: 0, count: 0 },
       ...(existingData?.likeCount !== undefined ? { likeCount: existingData.likeCount } : {}),
       streamingLastFetched: new Date(),
       lastFetched: new Date(),

@@ -1,4 +1,4 @@
-import type { RecommendationItem, SimilarMovieItem } from "@binj/shared-types";
+import type { RecommendationItem, SimilarMovieItem } from "@zatlan/shared-types";
 import { requireDb } from "../lib/firebaseAdmin.js";
 import { AppError } from "../utils/AppError.js";
 

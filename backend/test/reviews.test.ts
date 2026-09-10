@@ -102,7 +102,7 @@ const { createApp } = await import("../src/app.js");
 beforeEach(() => {
   store.clear();
   currentUid = "uid-1";
-  store.set("movies/movie-1", { title: "Dune: Part Two", genres: ["Sci-Fi"], binjRating: { sum: 0, count: 0 } });
+  store.set("movies/movie-1", { title: "Dune: Part Two", genres: ["Sci-Fi"], zatlanRating: { sum: 0, count: 0 } });
   store.set("users/uid-1", { displayName: "Arjun", status: "active" });
 });
 
@@ -159,8 +159,8 @@ describe("PUT /movies/:movieId/reviews/me", () => {
     expect(res.body.data).toMatchObject({ rating: 4, reviewText: null, isAnonymous: false });
     expect(res.body.data).not.toHaveProperty("authorId");
 
-    const movie = store.get("movies/movie-1") as { binjRating: { sum: number; count: number } };
-    expect(movie.binjRating).toEqual({ sum: 4, count: 1 });
+    const movie = store.get("movies/movie-1") as { zatlanRating: { sum: number; count: number } };
+    expect(movie.zatlanRating).toEqual({ sum: 4, count: 1 });
 
     const review = store.get("movies/movie-1/reviews/uid-1") as { deleted: boolean; createdAt: unknown };
     expect(review.deleted).toBe(false);
@@ -175,8 +175,8 @@ describe("PUT /movies/:movieId/reviews/me", () => {
     const res = await authed(app, "put", "/movies/movie-1/reviews/me").send({ rating: 5, isAnonymous: false, reviewText: "Actually loved it" });
     expect(res.status).toBe(200);
 
-    const movie = store.get("movies/movie-1") as { binjRating: { sum: number; count: number } };
-    expect(movie.binjRating).toEqual({ sum: 5, count: 1 }); // 3 -> 5 is +2, sum was 3, now 5; count stays 1
+    const movie = store.get("movies/movie-1") as { zatlanRating: { sum: number; count: number } };
+    expect(movie.zatlanRating).toEqual({ sum: 5, count: 1 }); // 3 -> 5 is +2, sum was 3, now 5; count stays 1
 
     const review = store.get("movies/movie-1/reviews/uid-1") as { createdAt: Date; reviewText: string };
     expect(review.createdAt).toEqual(firstCreatedAt);
@@ -187,12 +187,12 @@ describe("PUT /movies/:movieId/reviews/me", () => {
     const app = createApp();
     await authed(app, "put", "/movies/movie-1/reviews/me").send({ rating: 4, isAnonymous: false });
     await authed(app, "delete", "/movies/movie-1/reviews/me");
-    expect((store.get("movies/movie-1") as { binjRating: { sum: number; count: number } }).binjRating).toEqual({ sum: 0, count: 0 });
+    expect((store.get("movies/movie-1") as { zatlanRating: { sum: number; count: number } }).zatlanRating).toEqual({ sum: 0, count: 0 });
 
     const res = await authed(app, "put", "/movies/movie-1/reviews/me").send({ rating: 5, isAnonymous: false });
     expect(res.status).toBe(200);
-    const movie = store.get("movies/movie-1") as { binjRating: { sum: number; count: number } };
-    expect(movie.binjRating).toEqual({ sum: 5, count: 1 });
+    const movie = store.get("movies/movie-1") as { zatlanRating: { sum: number; count: number } };
+    expect(movie.zatlanRating).toEqual({ sum: 5, count: 1 });
   });
 
   it("omitting reviewText stores null", async () => {
@@ -232,8 +232,8 @@ describe("DELETE /movies/:movieId/reviews/me", () => {
 
     const review = store.get("movies/movie-1/reviews/uid-1") as { deleted: boolean };
     expect(review.deleted).toBe(true);
-    const movie = store.get("movies/movie-1") as { binjRating: { sum: number; count: number } };
-    expect(movie.binjRating).toEqual({ sum: 0, count: 0 });
+    const movie = store.get("movies/movie-1") as { zatlanRating: { sum: number; count: number } };
+    expect(movie.zatlanRating).toEqual({ sum: 0, count: 0 });
   });
 });
 

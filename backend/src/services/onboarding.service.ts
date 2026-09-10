@@ -1,4 +1,4 @@
-import type { MovieCandidate, CelebritySuggestion } from "@binj/shared-types";
+import type { MovieCandidate, CelebritySuggestion } from "@zatlan/shared-types";
 import { requireDb } from "../lib/firebaseAdmin.js";
 import { discoverMovies } from "../lib/tmdb.js";
 import { getMovieDetail } from "./movies.service.js";

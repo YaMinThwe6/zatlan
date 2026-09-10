@@ -1,5 +1,5 @@
 {
-  "name": "@binj/shared-types",
+  "name": "@zatlan/shared-types",
   "version": "0.0.1",
   "private": true,
   "type": "module",

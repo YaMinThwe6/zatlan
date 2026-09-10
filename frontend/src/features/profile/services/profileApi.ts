@@ -1,6 +1,6 @@
 import { apiFetch } from '../../../lib/api'
-export type { PublicProfile, ProfileReviewEntry } from '@binj/shared-types'
-import type { PublicProfile, ProfileReviewEntry } from '@binj/shared-types'
+export type { PublicProfile, ProfileReviewEntry } from '@zatlan/shared-types'
+import type { PublicProfile, ProfileReviewEntry } from '@zatlan/shared-types'
 
 // GET /users/:uid — api-contracts.md §11b. The public-facing counterpart to
 // lib/api.ts's getMe: what any signed-in caller sees on someone else's

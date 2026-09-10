@@ -5,7 +5,7 @@ import { startEmailAuth, verifyEmailAuth } from '../services/authApi'
 
 // Purely a copy switch (heading/tagline) — "Get Started" and "Log in" hit
 // the exact same sign-in mechanism underneath. There's no separate signup
-// call: the backend creates a BINJ profile lazily on a brand-new user's
+// call: the backend creates a ZATLAN profile lazily on a brand-new user's
 // first authenticated request (hld.md §13), so a first-time Google/
 // Microsoft/email sign-in already *is* account creation, whichever button
 // got them here.
@@ -126,7 +126,7 @@ export function Welcome() {
   if (stage === 'welcome') {
     // Getting Started — an accent glow and a bottom fade-to-black wash over
     // the plain background (no photo — a stock/generic atmosphere shot read
-    // as an artificial, template-made touch rather than something BINJ's
+    // as an artificial, template-made touch rather than something ZATLAN's
     // own), content anchored to the bottom. Desktop swaps the small
     // wordmark-as-heading for a fixed top-left wordmark plus a large
     // headline + subtitle, and the button gains an arrow — mobile stays
@@ -170,7 +170,7 @@ export function Welcome() {
             in the same spot the mobile back arrow occupies, since desktop's
             bottom content block has no wordmark of its own to double as one. */}
         <div className="absolute top-10 left-14 z-10 hidden items-center gap-4 md:flex">
-          <span className="font-serif text-2xl font-bold text-accent">BINJ</span>
+          <span className="font-serif text-2xl font-bold text-accent">ZATLAN</span>
         </div>
         <button
           type="button"
@@ -184,18 +184,14 @@ export function Welcome() {
         </button>
 
         <div className="relative z-10 mt-auto flex animate-fade-in-up flex-col items-center px-8 pb-14 text-center md:px-10 md:pb-14">
-          <span className="font-serif text-5xl font-bold text-accent animate-logo-pulse md:hidden">BINJ</span>
+          <span className="font-serif text-5xl font-bold text-accent animate-logo-pulse md:hidden">ZATLAN</span>
           <p className="mt-3.5 mb-10 max-w-sm text-[15px] leading-relaxed text-text-secondary md:hidden">
-            Find your movie.
-            <br />
-            Find your people.
+            Stories are better together.
           </p>
 
-          <span className="hidden animate-logo-pulse font-serif text-6xl font-bold text-accent md:mb-3 md:block">BINJ</span>
+          <span className="hidden animate-logo-pulse font-serif text-6xl font-bold text-accent md:mb-3 md:block">ZATLAN</span>
           <span className="hidden font-serif text-5xl font-bold tracking-wide text-white md:block">
-            Find your movie.
-            <br />
-            Find your people.
+            Stories are better together.
           </span>
           <p className="mt-4.5 mb-8 hidden max-w-[460px] text-[15px] leading-relaxed text-text-secondary md:block">
             Discover films worth watching, and the people who want to watch them with you.
@@ -239,7 +235,7 @@ export function Welcome() {
 
         {stage === 'form' && (
           <div className="relative flex flex-1 flex-col px-7 pt-9 pb-10">
-            <span className="font-serif text-[22px] font-bold text-accent">BINJ</span>
+            <span className="font-serif text-[22px] font-bold text-accent">ZATLAN</span>
             <h1 className="mt-[22px] font-serif text-[26px] font-semibold text-white">
               {intent === 'signup' ? 'Create your account' : 'Welcome back'}
             </h1>
@@ -375,7 +371,7 @@ export function Welcome() {
           }}
         />
         <div className="relative flex h-full flex-col justify-between p-12">
-          <span className="font-serif text-2xl font-bold text-accent">BINJ</span>
+          <span className="font-serif text-2xl font-bold text-accent">ZATLAN</span>
           <div>
             <div className="font-serif text-[32px] leading-tight font-semibold text-white">
               {stage === 'verify' ? 'One code. That’s it.' : intent === 'signup' ? 'Your next favorite movie is one tap away.' : 'Your watchlist missed you.'}

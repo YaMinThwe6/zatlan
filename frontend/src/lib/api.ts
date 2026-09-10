@@ -1,10 +1,10 @@
 import { auth } from './firebase'
-// Request/response shapes live in @binj/shared-types, the single source of
+// Request/response shapes live in @zatlan/shared-types, the single source of
 // truth both frontend and backend import from (packages/shared-types) — see
 // [[feedback_monorepo_shared_packages_solid]]. `Me` is this file's own name
 // for the shared `UserProfile`.
-export type { UserProfile as Me, ReportTargetType, CreateReportResult } from '@binj/shared-types'
-import type { UserProfile as Me, ReportTargetType, CreateReportResult } from '@binj/shared-types'
+export type { UserProfile as Me, ReportTargetType, CreateReportResult } from '@zatlan/shared-types'
+import type { UserProfile as Me, ReportTargetType, CreateReportResult } from '@zatlan/shared-types'
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:6501'
 

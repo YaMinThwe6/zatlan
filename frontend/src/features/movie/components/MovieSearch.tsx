@@ -269,6 +269,19 @@ export function MovieSearch() {
         </button>
       </form>
 
+      {/* Movies are the whole catalog today; series and books are the next
+          content types on the roadmap (PRD.md §P2). Sets expectations here on
+          the discovery surface rather than letting people search for a show
+          and assume ZATLAN just doesn't have it. */}
+      <div className="mt-3 flex items-start gap-2.5 rounded-xl border border-border-soft bg-surface-alt px-3.5 py-2.5">
+        <span className="mt-0.5 flex-none rounded-full bg-[rgba(155,171,196,0.14)] px-2 py-0.5 text-[9.5px] font-bold text-text-faint">
+          Coming soon
+        </span>
+        <p className="text-[12.5px] leading-relaxed text-text-muted">
+          <span className="font-semibold text-text-secondary">Series and books</span> are coming to ZATLAN. For now, discovery is all about movies.
+        </p>
+      </div>
+
       {facet && !browseFacet && status !== 'loading' && (
         <button
           type="button"
@@ -364,7 +377,7 @@ export function MovieSearch() {
     return (
       <main className="flex min-h-svh flex-1 flex-col bg-bg text-text">
         <header className="flex items-center justify-between border-b border-border-soft px-5 py-4">
-          <span className="font-serif text-lg font-bold text-accent">BINJ</span>
+          <span className="font-serif text-lg font-bold text-accent">ZATLAN</span>
           <div className="flex items-center gap-4">
             <button type="button" onClick={() => navigate('/story')} className="cursor-pointer text-[13px] font-semibold text-text-secondary">
               Our Story
@@ -379,7 +392,7 @@ export function MovieSearch() {
           <div className="mx-auto w-full max-w-3xl flex-1 px-5 py-6">
             <div className="mb-6">
               <h1 className="font-serif text-[26px] font-semibold text-white">Discover movies</h1>
-              <p className="mt-1 text-[13.5px] text-text-muted">Search, browse, and see what BINJ's community thinks — sign in to rate, save, and connect.</p>
+              <p className="mt-1 text-[13.5px] text-text-muted">Search, browse, and see what ZATLAN's community thinks — sign in to rate, save, and connect.</p>
             </div>
             {searchPanel}
           </div>

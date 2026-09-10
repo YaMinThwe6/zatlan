@@ -10,7 +10,7 @@
 // refreshRecentMovies.ts — a real Cloud Scheduler job (re-seeding weekly,
 // say) is the eventual upgrade path once there's traffic to justify it.
 //
-// Run manually for now: pnpm --filter binj-backend run seed-search-catalog [pages]
+// Run manually for now: pnpm --filter zatlan-backend run seed-search-catalog [pages]
 // Defaults to 25 pages (~500 movies) if no page count is given.
 
 import { requireDb } from "../src/lib/firebaseAdmin.js";
