@@ -269,6 +269,19 @@ export function MovieSearch() {
         </button>
       </form>
 
+      {/* Movies are the whole catalog today; series and books are the next
+          content types on the roadmap (PRD.md §P2). Sets expectations here on
+          the discovery surface rather than letting people search for a show
+          and assume ZATLAN just doesn't have it. */}
+      <div className="mt-3 flex items-start gap-2.5 rounded-xl border border-border-soft bg-surface-alt px-3.5 py-2.5">
+        <span className="mt-0.5 flex-none rounded-full bg-[rgba(155,171,196,0.14)] px-2 py-0.5 text-[9.5px] font-bold text-text-faint">
+          Coming soon
+        </span>
+        <p className="text-[12.5px] leading-relaxed text-text-muted">
+          <span className="font-semibold text-text-secondary">Series and books</span> are coming to ZATLAN. For now, discovery is all about movies.
+        </p>
+      </div>
+
       {facet && !browseFacet && status !== 'loading' && (
         <button
           type="button"

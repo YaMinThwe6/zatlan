@@ -89,6 +89,12 @@ describe('MovieSearch — signed-in usage (via Home)', () => {
     expect(await screen.findByText('Home page')).toBeInTheDocument()
   })
 
+  it('teases that series and books are coming', () => {
+    renderWithRouter()
+    expect(screen.getByText(/series and books/i)).toBeInTheDocument()
+    expect(screen.getByText(/for now, discovery is all about movies/i)).toBeInTheDocument()
+  })
+
   it('badges a result the caller has watched / watchlisted', async () => {
     searchMovies.mockResolvedValue({
       items: [

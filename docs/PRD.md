@@ -816,6 +816,7 @@ The prototype should prioritize a coherent end-to-end experience.
 - Complex streaming integrations
 - "Nearby people" discovery
 - "Movies none of us have watched" filter (new idea, not yet designed in detail — see [docs/hld.md](hld.md) §11)
+- **Additional content types — TV series and books.** ZATLAN starts movies-only for the prototype, but the direction is to become a "what do we watch/read together" platform, not only movies. Series come first (same TMDB source, same catalog/rooms/events model, adds season/episode structure); books follow as a separate media type with its own metadata source. The signed-in discovery surface already carries a "Series and books — coming soon" banner so users don't read the movies-only catalog as a gap. Not scoped in detail yet; parked until the current build is tested and stable.
 - Monetization — Google Ads integration as a future revenue layer, must not compromise privacy/safety/core experience (§31)
 - Passkey (WebAuthn) sign-in, alongside OAuth — deferred since Firebase Authentication has no native passkey provider yet (§8, [docs/hld.md](hld.md) §11)
 

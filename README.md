@@ -471,6 +471,8 @@ The core experience is:
 
 Features such as Teleparty synchronization, one-login access to multiple streaming services, and a full Reddit-style community system are considered future/advanced functionality and should not jeopardize the core prototype.
 
+The prototype is **movies-only**. TV series and books are planned as additional content types (series first, books after) — the catalog, rooms, and events model is meant to extend to them, but they are out of scope for this submission. See [docs/PRD.md](docs/PRD.md) §P2.
+
 ---
 
 # Project Success Criteria
